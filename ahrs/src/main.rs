@@ -72,6 +72,14 @@ fn read_imu(spi: &mut Spidev) {
   read_spi4([0x38, 0x00, 0x3A, 0x00], spi, String::from("Z_DELTVEL"));
 }
 
+fn read_mag(spi: &mut Spidev) {
+  read_spi2([0x20, 0x22], spi, String::from("CTRL-REG")); // Default is 0b00010000, 0b00000011, or 16, 3 in decimal
+}
+
+fn read_bar(spi: &mut Spidev) {
+  read_spi2([0xA0, 0xA1], spi, String::from("PROM"));
+}
+
 fn read_spi4(tx_buf: [u8; 4], spi: &Spidev, s: String) {
   let mut rx_buf = [0; 4];
   let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
@@ -100,7 +108,7 @@ fn configure_imu(spi: &mut Spidev, imu: &mut SpidevOptions) {
   imu.bits_per_word(8);
   imu.max_speed_hz(2_000_000);
   imu.lsb_first(false);
-  imu.mode(SpiModeFlags::SPI_MODE_0);
+  imu.mode(SpiModeFlags::SPI_MODE_3);
   imu.build();
   spi.configure(imu).expect("Failed to configure SPI for the IMU");
 }
@@ -109,7 +117,7 @@ fn configure_mag(spi: &mut Spidev, mag: &mut SpidevOptions) {
   mag.bits_per_word(8);
   mag.max_speed_hz(10_000_000);
   mag.lsb_first(false);
-  mag.mode(SpiModeFlags::SPI_MODE_3);
+  mag.mode(SpiModeFlags::SPI_MODE_0);
   mag.build();
   spi.configure(mag).expect("Failed to configure SPI for the Magnetometer");
 }
