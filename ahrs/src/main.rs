@@ -1,6 +1,7 @@
 use spidev::spidevioctl::SpidevTransfer;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::thread;
+use std::fs;
 use std::time::Duration;
 pub mod gpio;
 
@@ -39,9 +40,11 @@ fn main() {
   gpio::set_input(MAG_INT);
 
   loop {
-    gpio::set_low(IMU_CS);
     configure_imu(&mut spi, &mut imu);
-    read_imu(&mut spi);
+    gpio::set_low(IMU_CS);
+    if read_gpio(IMU_DR) == "1" {
+      read_imu(&mut spi);
+    }
     gpio::set_high(IMU_CS);
 
     thread::sleep(Duration::from_micros(100));
@@ -118,4 +121,10 @@ fn configure_bar(spi: &mut Spidev, bar: &mut SpidevOptions) {
   bar.mode(SpiModeFlags::SPI_MODE_0);
   bar.build();
   spi.configure(bar).expect("Failed to configure SPI for the Barometer");
+}
+
+fn read_gpio(pin: &str) -> String {
+  let path = format!("/sys/class/gpio/gpio{}/value", pin);
+  let value = fs::read_to_string(path).expect("Failed to read GPIO");
+  value
 }
