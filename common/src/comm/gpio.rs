@@ -134,7 +134,7 @@ impl Pin {
       PinValue::High => bits | (1 << self.index),
     };
 
-    unsafe {std::ptr::write_volatile(dataout, bits) };
+    unsafe {std::ptr::write_volatile(*(self.gpio.dataout), bits) };
   }
 
   pub fn digital_read(&self) -> PinValue {
