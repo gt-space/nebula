@@ -398,6 +398,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "jeflog",
+ "libc",
  "postcard",
  "pyo3",
  "rusqlite",

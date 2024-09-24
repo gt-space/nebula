@@ -1,0 +1,135 @@
+use libc::{c_int, c_void, off_t, size_t};
+use std::{
+  ffi::CString,
+  sync::{Arc, Mutex},
+};
+
+const GPIO_BASE_REGISTERS: [off_t; 4] =
+  [0x44E0_7000, 0x4804_C000, 0x481A_C000, 0x481A_E000];
+const GPIO_REGISTER_SIZE: size_t = 0xFFF;
+
+const GPIO_OE_REGISTER: isize = 0x134;
+const GPIO_DATAOUT_REGISTER: isize = 0x13C;
+const GPIO_DATAIN_REGISTER: isize = 0x138;
+
+#[derive(Debug, PartialEq)]
+pub enum PinValue {
+  Low = 0,
+  High = 1,
+}
+
+#[derive(Debug)]
+pub enum PinMode {
+  Output,
+  Input,
+}
+
+pub struct Gpio {
+  fd: c_int,
+  base: *mut c_void,
+  oe: *mut u32,
+  dataout: *mut u32,
+  datain: *const u32,
+}
+
+pub struct Pin {
+  gpio: &Gpio,
+  index: usize,
+}
+
+impl Drop for Gpio {
+  fn drop(&mut self) {
+    unsafe {
+      libc::munmap(*self.base.lock().unwrap(), GPIO_REGISTER_SIZE);
+      libc::close(self.fd);
+    };
+  }
+}
+
+impl Gpio {
+  pub fn open_controller(controller_index: usize) -> &Gpio {
+    let path = CString::new("/dev/mem").unwrap();
+    let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
+
+    if fd < 0 {
+      panic!("Cannot open memory device");
+    }
+
+    let base = unsafe {
+      libc::mmap(
+        std::ptr::null_mut(),
+        GPIO_REGISTER_SIZE,
+        libc::PROT_READ | libc::PROT_WRITE,
+        libc::MAP_SHARED,
+        fd,
+        GPIO_BASE_REGISTERS[controller_indexindex],
+      )
+    };
+
+    if base.is_null() {
+      panic!("Cannot map GPIO");
+    }
+
+    if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
+      panic!("Invalid start address for GPIO DMA operations");
+    }
+    // } else if base != GPIO_BASE_REGISTERS[index] as *mut c_void {
+    //     panic!("Cannot acquire GPIO at {index}. Did you call Gpio::open
+    // twice?"); }
+
+    let oe = unsafe { base.offset(GPIO_OE_REGISTER) as *mut u32 };
+
+    let dataout = unsafe { base.offset(GPIO_DATAOUT_REGISTER) as *mut u32 };
+
+    let datain = unsafe { base.offset(GPIO_DATAIN_REGISTER) as *mut u32 };
+
+    Gpio {
+      fd,
+      base,
+      oe,
+      dataout,
+      datain,
+    }
+  }
+
+  pub fn get_pin(&self, pin_index: usize) -> Pin {
+    Pin {
+      gpio: &self,
+      pin_index,
+    }
+  }
+}
+
+impl Pin {
+  pub fn mode(&mut self, mode: PinMode) {
+    let mut bits = unsafe { std::ptr::read_volatile(self.gpio.oe) };
+
+    bits = match mode {
+      PinMode::Output => bits & !(1 << self.index),
+      PinMode::Input => bits | (1 << self.index),
+    };
+
+    unsafe { std::ptr::write_volatile(self.gpio.oe, bits) };
+  }
+
+  pub fn digital_write(&mut self, value: PinValue) {
+    let mut bits = unsafe { std::ptr::read_volatile(self.gpio.dataout) };
+
+    bits = match value {
+      PinValue::Low => bits & !(1 << self.index),
+      PinValue::High => bits | (1 << self.index),
+    };
+
+    unsafe {std::ptr::write_volatile(dataout, bits) };
+  }
+
+  pub fn digital_read(&self) -> PinValue {
+    let bits = unsafe { std::ptr::read_volatile(self.gpio.datain) };
+
+    if bits & (1 << self.index) != 0 {
+      PinValue::High
+    } else {
+      PinValue::Low
+    }
+  }
+}
