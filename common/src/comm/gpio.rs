@@ -24,18 +24,20 @@ pub enum PinMode {
   Input,
 }
 
-pub struct Gpio {
+pub struct Gpio<'a> {
   fd: c_int,
   base: *mut c_void,
-  oe: *mut u32,
-  dataout: *mut u32,
+  direction: &'a AtomicU32,
+  dataout: &'a AtomicU32,
   datain: *const u32,
 }
 
-pub struct Pin {
-  gpio: &Gpio,
-  index: usize,
+pub struct Pin<'a> {
+  gpio: &'a Gpio,
+  index: u8,
 }
+
+// 
 
 impl Drop for Gpio {
   fn drop(&mut self) {
@@ -47,13 +49,16 @@ impl Drop for Gpio {
 }
 
 impl Gpio {
-  pub fn open_controller(controller_index: usize) -> &Gpio {
+  pub fn open_controller(controller_index: usize) -> Gpio {
     let path = CString::new("/dev/mem").unwrap();
     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
 
     if fd < 0 {
       panic!("Cannot open memory device");
     }
+
+    // /dev/mem accesses physical memory. mmap puts files in address space
+    // but dev/mem is unqiue because contents are actual hw locations
 
     /*
     mmap creates a block of virtual memory that is mapped to the hw registers.
@@ -73,11 +78,13 @@ impl Gpio {
         fd,
         GPIO_BASE_REGISTERS[controller_indexindex],
       )
-    } as *const u8;
+    };
 
     if base.is_null() {
       panic!("Cannot map GPIO");
     }
+
+    // convert to a u32 reference and make lifetime of self lifetime
 
     // if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
     //   panic!("Invalid start address for GPIO DMA operations");
@@ -136,6 +143,8 @@ impl Pin {
 
     unsafe {std::ptr::write_volatile(*(self.gpio.dataout), bits) };
   }
+
+  // just cuz it works doesent mean no undefined behavior
 
   pub fn digital_read(&self) -> PinValue {
     let bits = unsafe { std::ptr::read_volatile(*(self.gpio.datain)) };

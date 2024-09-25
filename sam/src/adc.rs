@@ -3,7 +3,6 @@ use spidev::spidevioctl::SpidevTransfer;
 use spidev::Spidev;
 use std::sync::Arc;
 use std::{thread, time};
-
 use std::collections::HashMap;
 use std::rc::Rc;
 
