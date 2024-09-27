@@ -6,6 +6,8 @@ pub mod gpio;
 pub mod state;
 pub mod tc;
 
+// Rev 3 Cleanup and Improvement!
+
 use adc::open_controllers;
 use command::begin;
 use gpio::Gpio;
