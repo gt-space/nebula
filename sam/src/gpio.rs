@@ -17,7 +17,7 @@
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
   ffi::CString,
-  sync::{Arc, Mutex},
+  sync::{atomic::{AtomicU32, Ordering}, Arc, Mutex},
 };
 
 const GPIO_BASE_REGISTERS: [off_t; 4] =
@@ -46,33 +46,57 @@ pub enum BitOrder {
   MSBFirst,
 }
 
+// pub struct Gpio {
+//   fd: c_int,
+//   base: Mutex<*mut c_void>,
+//   oe: Mutex<*mut u32>,
+//   dataout: Mutex<*mut u32>,
+//   datain: *const u32,
+// }
+
 pub struct Gpio {
   fd: c_int,
-  base: Mutex<*mut c_void>,
-  oe: Mutex<*mut u32>,
-  dataout: Mutex<*mut u32>,
-  datain: *const u32,
+  base: AtomicPtr<c_void>,
+  oe: AtomicU32,
+  dataout: AtomicU32,
+  datain: AtomicU32
 }
 
-unsafe impl Send for Gpio {}
-unsafe impl Sync for Gpio {}
+// below impl's not needed because we are moving to single threaded application
+// unsafe impl Send for Gpio {}
+// unsafe impl Sync for Gpio {}
 
 pub struct Pin {
-  gpio: Arc<Gpio>,
+  // gpio: Arc<Gpio>,
+  gpio: Rc<Gpio>,
   index: usize,
 }
+
+// impl Drop for Gpio {
+//   fn drop(&mut self) {
+//     unsafe {
+//       libc::munmap(*self.base.lock().unwrap(), GPIO_REGISTER_SIZE);
+//       libc::close(self.fd);
+//     };
+//   }
+// }
 
 impl Drop for Gpio {
   fn drop(&mut self) {
     unsafe {
-      libc::munmap(*self.base.lock().unwrap(), GPIO_REGISTER_SIZE);
+      // Load the base pointer from AtomicPtr with strictest ordering
+      let base_ptr = self.base.load(Ordering::SeqCst);
+
+      // Unmap the memory and close the file descriptor
+      libc::munmap(base_ptr, GPIO_REGISTER_SIZE);
       libc::close(self.fd);
-    };
+
+    }
   }
 }
 
 impl Gpio {
-  pub fn open(index: usize) -> Arc<Gpio> {
+  pub fn open(index: usize) -> Rc<Gpio> {
     let path = CString::new("/dev/mem").unwrap();
     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
 
