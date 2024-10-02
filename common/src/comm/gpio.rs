@@ -223,7 +223,7 @@ pub struct Gpio<'a> {
   base: AtomicPtr<c_void>,
   oe: &'a AtomicU32,
   dataout: &'a AtomicU32,
-  datain: &'a AtomicU32
+  datain: &'a u32
 }
 
 // below impl's not needed because we are moving to single threaded application
@@ -290,7 +290,7 @@ impl<'a> Gpio<'a> {
     let base = AtomicPtr::new(base);
 
     // Load the base pointer value to calculate register addresses
-    let base_loaded: *mut u8 = base.load(Ordering::SeqCst) as *mut u8;
+    let base_loaded: *mut c_void = base.load(Ordering::SeqCst);
 
     // let oe = Mutex::new(unsafe { base.offset(GPIO_OE_REGISTER) as *mut u32 });
     let oe_address = unsafe { base_loaded.offset(GPIO_OE_REGISTER) as *mut AtomicU32 };
@@ -303,7 +303,7 @@ impl<'a> Gpio<'a> {
     let dataout = unsafe{ &*dataout_address} ;
 
     // let datain = unsafe { base.offset(GPIO_DATAIN_REGISTER) as *mut u32 };
-    let datain_address = unsafe { base_loaded.offset(GPIO_DATAIN_REGISTER) as *const AtomicU32 };
+    let datain_address = unsafe { base_loaded.offset(GPIO_DATAIN_REGISTER) as *const u32 };
     let datain = unsafe { &*datain_address };
 
     Rc::new(Gpio {
@@ -385,7 +385,7 @@ impl<'a> Pin<'a> {
   // }
 
   pub fn digital_read(&self) -> PinValue {
-    let datain = self.gpio.datain.load(Ordering::SeqCst);
+    let datain = self.gpio.datain;
 
     if datain & (1 << self.index) != 0 {
       PinValue::High
