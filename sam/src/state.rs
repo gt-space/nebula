@@ -5,6 +5,7 @@ use crate::{
     data_ready_mappings,
     gpio_controller_mappings,
     pull_gpios_high,
+    ADCEnum,
     ADC,
   },
   data::{generate_data_point, serialize_data},
@@ -22,16 +23,24 @@ use std::{
   thread,
   time::Instant,
 };
-use std::io;
+use std::{io, fs};
 
 const FC_ADDR: &str = "server-01";
 
 const FC_HEARTBEAT_TIMEOUT: u128 = 500;
 
+const PATH_3V3: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
+const PATH_5V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
+const PATH_5I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
+const PATH_24V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
+const PATH_24I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
+const RAIL_PATHS: [&str; 5] = [PATH_3V3, PATH_5V, PATH_5I, PATH_24V, PATH_24I];
+
+
 pub struct Data {
   pub data_socket: UdpSocket,
   flight_computer: Option<SocketAddr>,
-  adcs: Option<Vec<adc::ADC>>,
+  adcs: Option<Vec<adc::ADCEnum>>,
   state_num: u32,
   curr_measurement: Option<adc::Measurement>,
   data_points: Vec<DataPoint>,
@@ -97,59 +106,59 @@ impl State {
         // Instantiate all measurement types
         // spi1 = current loops, differenital sensors
         // spi2 = valve voltage, valve current, rtd
-        let ds = ADC::new(
+        let ds = ADCEnum::ADC(ADC::new(
             adc::Measurement::DiffSensors,
             ref_spi1.clone(),
             ref_controllers.clone(),
             ref_drdy.clone(),
-        );
-        let cl = ADC::new(
+        ));
+        let cl = ADCEnum::ADC(ADC::new(
           adc::Measurement::CurrentLoopPt,
           ref_spi1.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let vvalve = ADC::new(
+        ));
+        let vvalve = ADCEnum::ADC(ADC::new(
           adc::Measurement::VValve,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let ivalve = ADC::new(
+        ));
+        let ivalve = ADCEnum::ADC(ADC::new(
           adc::Measurement::IValve,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd1 = ADC::new(
+        ));
+        let rtd1 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd2 = ADC::new(
+        ));
+        let rtd2 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd3 = ADC::new(
+        ));
+        let rtd3 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
+        ));
+
+        let pwr = ADCEnum::OnboardADC;
  
         pull_gpios_high(&data.gpio_controllers);
 
         data.adcs = Some(vec![
           ds,
           cl,
-          vvalve,
+          // vvalve,
           ivalve,
-          // rtd1,
-          // rtd2,
-          // rtd3,
+          pwr
         ]);
 
         data
@@ -158,7 +167,7 @@ impl State {
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
 
-        State::InitAdcs
+        State::DeviceDiscovery
       }
 
       State::DeviceDiscovery => {
@@ -241,66 +250,77 @@ impl State {
       }
 
       State::InitAdcs => {
-        for adc in data.adcs.as_mut().unwrap() {
-          adc.init_gpio(data.curr_measurement);
-          data.curr_measurement = Some(adc.measurement);
-          adc.reset_status();
+        for adc_enum in data.adcs.as_mut().unwrap() {
+          match adc_enum {
+            ADCEnum::ADC(adc) => {
+              adc.pull_cs_low_active_low(); // select current ADC
+              // Does below line do anything?
+              data.curr_measurement = Some(adc.measurement); // see if we can remove option
+              adc.reset_status(); // reset registers
+              adc.init_regs(); // measurement specific register initialization
+              adc.start_conversion(); // begin converting in single shot mode
+              adc.write_iteration(0); // pin mux to be on first channel
+              adc.pull_cs_high_active_low(); // deselect current ADC
+            },
 
-          adc.init_regs();
-          adc.start_conversion();
-
-          adc.write_iteration(0);
-        }
-
-        pass!("Initialized ADCs");
-        State::PollAdcs
-      }
-
-      State::PollAdcs => {
-        data.data_points.clear();
-
-        for i in 0..6 {
-          for adc in data.adcs.as_mut().unwrap() {
-            if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
-              || (i > 4 && adc.measurement == adc::Measurement::VPower)
-              || (i > 1
-                && (adc.measurement == adc::Measurement::IPower
-                  || adc.measurement == adc::Measurement::Rtd))
-              || (i > 3
-                && (adc.measurement == adc::Measurement::Tc1
-                  || adc.measurement == adc::Measurement::Tc2))
-            {
-              continue;
+            ADCEnum::OnboardADC => {
+              // nothing to initialize because it is on Beaglebone
             }
-
-            adc.init_gpio(data.curr_measurement);
-            data.curr_measurement = Some(adc.measurement);
-
-            // Read ADC
-            let (raw_value, unix_timestamp) = adc.get_adc_reading(i);
-
-            // Write ADC for next iteration
-            adc.write_iteration(i + 1);
-
-            // Don't add ambient temp reading to FC message
-            if i == 0
-              && (adc.measurement == adc::Measurement::Tc1
-                || adc.measurement == adc::Measurement::Tc2)
-            {
-              continue;
-            }
-
-            let data_point = generate_data_point(
-              raw_value,
-              unix_timestamp,
-              i,
-              adc.measurement,
-            );
-
-            data.data_points.push(data_point)
           }
         }
 
+        pass!("Initialized ADCs");
+        State::Identity
+      }
+
+      State::PollAdcs => {
+        /*
+        For each iteration of PollAdcs the the data_points vector will hold
+        one value from each channel of each ADC, thus we clear it at the start
+        to just have data from one iteration
+         */
+        data.data_points.clear();
+        /*
+        Going from 0 to 5 inclusive is the maximum number of channels or
+        readings we can get from an ADC. If the current ADC has less, we simply
+        skip that channel and go to the next ADC
+         */
+        for i in 0..6 {
+          for adc_enum in data.adcs.as_mut().unwrap() {
+            let (raw_value, unix_timestamp, measurement) = match adc_enum {
+              ADCEnum::ADC(adc) => {
+                let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+                let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+                // skip to next ADC logic
+                if diff_reached_max_channel || rtd_reached_max_channel {
+                  continue;
+                }
+
+                adc.pull_cs_low_active_low(); // select current ADC
+                data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
+                let (val, time) = adc.get_adc_reading(i); // get data and time
+                adc.write_iteration(i + 1); // perform pin mux to next channel or reading
+                adc.pull_cs_high_active_low(); // deselect current ADC
+                (val, time, adc.measurement)
+              },
+
+              ADCEnum::OnboardADC => {
+                if i > 4 {
+                  continue;
+                }
+
+                let (val, rail_measurement) = read_onboard_adc(i);
+                data.curr_measurement = Some(rail_measurement);
+                (val, 0.0, rail_measurement)
+              }
+            };
+
+            let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
+            data.data_points.push(data_point);
+          }
+        }
+
+        // this block of code sends data to flight computer
         if let Some(board_id) = data.board_id.clone() {
           let serialized = serialize_data(board_id, &data.data_points);
 
@@ -397,4 +417,48 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
       .build();
   spi.configure(&options)?;
   Ok(spi)
+}
+
+// pinout is for flight version
+pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
+  let data = match fs::read_to_string(RAIL_PATHS[channel as usize]) {
+    Ok(output) => output,
+    Err(_e) => {
+      eprintln!("Fail to read {}", RAIL_PATHS[channel as usize]);
+      if channel == 0 || channel == 1 || channel == 3 {
+        return (-1.0, adc::Measurement::VPower)
+      } else {
+        return (-1.0, adc::Measurement::IPower)
+      }
+    }
+  };
+
+  if data.is_empty() {
+    eprintln!("Empty data for on board ADC channel {}", channel);
+    if channel == 0 || channel == 1 || channel == 3 {
+      return (-1.0, adc::Measurement::VPower)
+    } else {
+      return (-1.0, adc::Measurement::IPower)
+    }
+  }
+
+  match data.trim().parse::<f64>() {
+    Ok(data) => {
+      let voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
+      if channel == 0 || channel == 1 || channel == 3 {
+        ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
+      } else {
+        (voltage, adc::Measurement::VPower)
+      }
+    },
+
+    Err(_e) => {
+      eprintln!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
+      if channel == 0 || channel == 1 || channel == 3 {
+        (-1.0, adc::Measurement::VPower)
+      } else {
+        (-1.0, adc::Measurement::IPower)
+      }
+    }
+  }
 }

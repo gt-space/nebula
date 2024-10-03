@@ -28,6 +28,12 @@ pub enum Measurement {
   Rtd,
 }
 
+pub enum ADCEnum {
+  ADC(ADC),
+  OnboardADC,
+}
+
+
 pub struct ADC {
   pub measurement: Measurement,
   pub spidev: Rc<Spidev>,
@@ -68,15 +74,30 @@ impl ADC {
     cs_gpios
   }
 
-  pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
-    // pull old adc HIGH
-    if let Some(old_adc) = prev_adc {
-      if let Some(pin) = self.gpio_mappings.get(&old_adc) {
-        pin.digital_write(High);
-      }
-    }
+  // DO NOT USE THIS FUNCTION
+  // pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
+  //   // pull old adc HIGH
+  //   if let Some(old_adc) = prev_adc {
+  //     if let Some(pin) = self.gpio_mappings.get(&old_adc) {
+  //       pin.digital_write(High);
+  //     }
+  //   }
 
-    // pull new adc LOW
+  //   // pull new adc LOW
+  //   if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+  //     pin.digital_write(Low);
+  //   }
+  // }
+
+  // selects current ADC
+  pub fn pull_cs_high_active_low(&mut self) {
+    if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+      pin.digital_write(High);
+    }
+  }
+
+  // deselects current ADC
+  pub fn pull_cs_low_active_low(&mut self) {
     if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
       pin.digital_write(Low);
     }
@@ -129,6 +150,7 @@ impl ADC {
         self.write_reg(0x04, 0x1E);
         self.write_reg(0x05, 0x0A);
       }
+
     }
 
     // delay for at least 4000*clock period
@@ -320,6 +342,7 @@ impl ADC {
         }
         _ => fail!("Failed register write — could not mod iteration"),
       },
+      
     }
   }
 
@@ -429,14 +452,14 @@ pub fn gpio_controller_mappings( // --> whats on the board
     v_valve_pin.mode(Output);
 
   HashMap::from([
-    //(Measurement::CurrentLoopPt, cl_pin),
+    //(Measurement::CurrentLoopPt, cl_pin), // dedicated CS pin ?
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
     //(Measurement::VPower, v_power_pin),
     //(Measurement::IPower, i_power_pin),
     //(Measurement::Tc1, tc_1_pin),
     //(Measurement::Tc2, tc_2_pin),
-    //(Measurement::DiffSensors, diff_pin),
+    //(Measurement::DiffSensors, diff_pin), // dedicated CS pin ?
     (Measurement::Rtd, rtd1_pin),
     (Measurement::Rtd, rtd2_pin),
     (Measurement::Rtd, rtd3_pin),
