@@ -1,3 +1,4 @@
+use crate::gpio::Pin;
 use crate::gpio::{PinMode::Output, PinValue::Low};
 use crate::{
   adc::{
@@ -35,7 +36,6 @@ const PATH_5I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
 const PATH_24V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
 const PATH_24I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
 const RAIL_PATHS: [&str; 5] = [PATH_3V3, PATH_5V, PATH_5I, PATH_24V, PATH_24I];
-
 
 pub struct Data {
   pub data_socket: UdpSocket,
@@ -461,4 +461,21 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
       }
     }
   }
+}
+
+// check pin numbers
+pub fn get_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
+  let sel1 = controllers[0].get_pin(30);
+  sel1.mode(Output);
+  sel1.digital_write(Low);
+
+  let sel2 = controllers[2].get_pin(15);
+  sel2.mode(Output);
+  sel2.digital_write(Low);
+
+  let sel3 = controllers[3].get_pin(21);
+  sel3.mode(Output);
+  sel3.digital_write(Low);
+
+  [sel1, sel2, sel3]
 }
