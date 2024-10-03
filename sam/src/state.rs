@@ -169,7 +169,7 @@ impl State {
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
 
-        State::DeviceDiscovery
+        State::InitAdcs
       }
 
       State::DeviceDiscovery => {
@@ -272,11 +272,10 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::Identity
+        State::PollAdcs
       }
 
       State::PollAdcs => {
-        let sel_pins = data.gpio_controllers
         /*
         For each iteration of PollAdcs the the data_points vector will hold
         one value from each channel of each ADC, thus we clear it at the start
@@ -307,7 +306,7 @@ impl State {
                 let (val, time) = match adc.measurement {
                   adc::Measurement::IValve => {
                     let (v, t) = adc.get_adc_reading(i/2);
-                    let current_sel_pin: Pin = valve_sel_pins[i/2];
+                    let current_sel_pin = &valve_sel_pins[(i as usize) / 2];
 
                     match current_sel_pin.digital_read() {
                       Low => current_sel_pin.digital_write(High),
@@ -335,6 +334,7 @@ impl State {
               }
             };
 
+            println!("{:?} Channel {}: {}", measurement, i, raw_value);
             let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
             data.data_points.push(data_point);
           }
