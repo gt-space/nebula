@@ -548,3 +548,20 @@ pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) { // --> whats on the board
     pin.digital_write(High);
   }
 }
+
+// check pin numbers
+pub fn init_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
+  let sel1 = controllers[0].get_pin(30);
+  sel1.mode(Output);
+  sel1.digital_write(Low);
+
+  let sel2 = controllers[2].get_pin(15);
+  sel2.mode(Output);
+  sel2.digital_write(Low);
+
+  let sel3 = controllers[3].get_pin(21);
+  sel3.mode(Output);
+  sel3.digital_write(Low);
+
+  [sel1, sel2, sel3]
+}

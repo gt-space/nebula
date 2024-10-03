@@ -1,11 +1,12 @@
 use crate::gpio::Pin;
-use crate::gpio::{PinMode::Output, PinValue::Low};
+use crate::gpio::{PinMode::Output, PinValue::{Low, High}};
 use crate::{
   adc::{
     self,
     data_ready_mappings,
     gpio_controller_mappings,
     pull_gpios_high,
+    init_valve_sel_pins,
     ADCEnum,
     ADC,
   },
@@ -152,6 +153,7 @@ impl State {
         let pwr = ADCEnum::OnboardADC;
  
         pull_gpios_high(&data.gpio_controllers);
+        init_valve_sel_pins(&data.gpio_controllers);
 
         data.adcs = Some(vec![
           ds,
@@ -274,12 +276,14 @@ impl State {
       }
 
       State::PollAdcs => {
+        let sel_pins = data.gpio_controllers
         /*
         For each iteration of PollAdcs the the data_points vector will hold
         one value from each channel of each ADC, thus we clear it at the start
         to just have data from one iteration
          */
         data.data_points.clear();
+        let valve_sel_pins = [data.gpio_controllers[0].get_pin(30), data.gpio_controllers[2].get_pin(15), data.gpio_controllers[3].get_pin(21)];
         /*
         Going from 0 to 5 inclusive is the maximum number of channels or
         readings we can get from an ADC. If the current ADC has less, we simply
@@ -298,7 +302,23 @@ impl State {
 
                 adc.pull_cs_low_active_low(); // select current ADC
                 data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
-                let (val, time) = adc.get_adc_reading(i); // get data and time
+                
+                // get data and time
+                let (val, time) = match adc.measurement {
+                  adc::Measurement::IValve => {
+                    let (v, t) = adc.get_adc_reading(i/2);
+                    let current_sel_pin: Pin = valve_sel_pins[i/2];
+
+                    match current_sel_pin.digital_read() {
+                      Low => current_sel_pin.digital_write(High),
+                      High => current_sel_pin.digital_write(Low),
+                    }
+
+                    (v, t)
+                  },
+                  _ => adc.get_adc_reading(i)
+                };
+
                 adc.write_iteration(i + 1); // perform pin mux to next channel or reading
                 adc.pull_cs_high_active_low(); // deselect current ADC
                 (val, time, adc.measurement)
@@ -461,21 +481,4 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
       }
     }
   }
-}
-
-// check pin numbers
-pub fn get_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
-  let sel1 = controllers[0].get_pin(30);
-  sel1.mode(Output);
-  sel1.digital_write(Low);
-
-  let sel2 = controllers[2].get_pin(15);
-  sel2.mode(Output);
-  sel2.digital_write(Low);
-
-  let sel3 = controllers[3].get_pin(21);
-  sel3.mode(Output);
-  sel3.digital_write(Low);
-
-  [sel1, sel2, sel3]
 }
