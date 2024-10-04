@@ -285,7 +285,9 @@ impl ADC {
 
         4 | 5 => {
           self.write_reg(0x02, 0x20 | 0x0C);
-        }
+        },
+        
+        _ => fail!("Failed register write — could not mod iteration"),
       }
 
       Measurement::VPower => match iteration % 5 {
