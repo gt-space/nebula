@@ -2,11 +2,11 @@ use common::comm::SamControlMessage;
 use jeflog::fail;
 use std::fs::File;
 
-use crate::gpio::{
+use crate::{adc::gpio_controller_mappings, gpio::{
   Gpio,
   PinMode::Output,
   PinValue::{High, Low},
-};
+}};
 use std::io::Write;
 use std::net::UdpSocket;
 use std::sync::Arc;
@@ -108,32 +108,38 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
     SamControlMessage::ActuateValve { channel, powered } => match powered {
       true => match channel {
         1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        2 => {
+          //let pin = gpio_controllers[0].get_pin(8);
           let pin = gpio_controllers[2].get_pin(16);
           pin.mode(Output);
           pin.digital_write(High);
         }
+        2 => {
+          //let pin = gpio_controllers[2].get_pin(16);
+          let pin = gpio_controllers[1].get_pin(16);
+          pin.mode(Output);
+          pin.digital_write(High);
+        }
         3 => {
-          let pin = gpio_controllers[2].get_pin(17);
+          //let pin = gpio_controllers[2].get_pin(17);
+          let pin = gpio_controllers[2].get_pin(13);
           pin.mode(Output);
           pin.digital_write(High);
         }
         4 => {
-          let pin = gpio_controllers[2].get_pin(25);
+          //let pin = gpio_controllers[2].get_pin(25);
+          let pin = gpio_controllers[1].get_pin(17);
           pin.mode(Output);
           pin.digital_write(High);
         }
         5 => {
-          let pin = gpio_controllers[2].get_pin(1);
+          //let pin = gpio_controllers[2].get_pin(1);
+          let pin = gpio_controllers[3].get_pin(19);
           pin.mode(Output);
           pin.digital_write(High);
         }
         6 => {
-          let pin = gpio_controllers[1].get_pin(14);
+          //let pin = gpio_controllers[1].get_pin(14);
+          let pin = gpio_controllers[2].get_pin(8);
           pin.mode(Output);
           pin.digital_write(High);
         }
@@ -141,32 +147,38 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
       },
       false => match channel {
         1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        2 => {
+          //let pin = gpio_controllers[0].get_pin(8);
           let pin = gpio_controllers[2].get_pin(16);
           pin.mode(Output);
           pin.digital_write(Low);
         }
+        2 => {
+          //let pin = gpio_controllers[2].get_pin(16);
+          let pin = gpio_controllers[1].get_pin(16);
+          pin.mode(Output);
+          pin.digital_write(Low);
+        }
         3 => {
-          let pin = gpio_controllers[2].get_pin(17);
+          //let pin = gpio_controllers[2].get_pin(17);
+          let pin = gpio_controllers[2].get_pin(13);
           pin.mode(Output);
           pin.digital_write(Low);
         }
         4 => {
-          let pin = gpio_controllers[2].get_pin(25);
+          //let pin = gpio_controllers[2].get_pin(25);
+          let pin = gpio_controllers[1].get_pin(17);
           pin.mode(Output);
           pin.digital_write(Low);
         }
         5 => {
-          let pin = gpio_controllers[2].get_pin(1);
+          //let pin = gpio_controllers[2].get_pin(1);
+          let pin = gpio_controllers[3].get_pin(19);
           pin.mode(Output);
           pin.digital_write(Low);
         }
         6 => {
-          let pin = gpio_controllers[1].get_pin(14);
+          //let pin = gpio_controllers[1].get_pin(14);
+          let pin = gpio_controllers[2].get_pin(8);
           pin.mode(Output);
           pin.digital_write(Low);
         }
