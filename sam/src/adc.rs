@@ -398,6 +398,8 @@ impl ADC {
                                                                           // println!("{:?}: {:?}", (iteration % 3) + 1, reading);
       }
     }
+
+    println!("{:?} [{iteration}]: {reading} ({value})", self.measurement);
     reading
   }
 }

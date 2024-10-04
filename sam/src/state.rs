@@ -95,11 +95,11 @@ impl State {
         //   .build();
         // spidev.configure(&options).unwrap();
         let spi0 = create_spi("/dev/spidev0.0").unwrap();
-        let spi1 = create_spi("/dev/spidev1.0").unwrap();
+        // let spi1 = create_spi("/dev/spidev1.1").unwrap();
 
         //let ref_spidev: Rc<_> = Rc::new(spidev);
         let ref_spi0: Rc<_> = Rc::new(spi0);
-        let ref_spi1: Rc<_> = Rc::new(spi1);
+        // let ref_spi1: Rc<_> = Rc::new(spi1);
         let ref_controllers =
           Rc::new(gpio_controller_mappings(&data.gpio_controllers));
         let ref_drdy = Rc::new(data_ready_mappings(&data.gpio_controllers));
@@ -109,13 +109,14 @@ impl State {
         // spi2 = valve voltage, valve current, rtd
         let ds = ADCEnum::ADC(ADC::new(
             adc::Measurement::DiffSensors,
-            ref_spi1.clone(),
+            Rc::new(create_spi("/dev/spidev1.0").unwrap()),
             ref_controllers.clone(),
             ref_drdy.clone(),
         ));
         let cl = ADCEnum::ADC(ADC::new(
           adc::Measurement::CurrentLoopPt,
-          ref_spi1.clone(),
+          Rc::new(create_spi("/dev/spidev1.1").unwrap()),
+          // ref_spi1.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         ));
@@ -292,7 +293,7 @@ impl State {
           for adc_enum in data.adcs.as_mut().unwrap() {
             let (raw_value, unix_timestamp, measurement) = match adc_enum {
               ADCEnum::ADC(adc) => {
-                let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+                let diff_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::DiffSensors;
                 let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
                 // skip to next ADC logic
                 if diff_reached_max_channel || rtd_reached_max_channel {
