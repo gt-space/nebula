@@ -286,37 +286,10 @@ impl ADC {
         4 | 5 => {
           self.write_reg(0x02, 0x20 | 0x0C);
         },
-        
-        _ => fail!("Failed register write — could not mod iteration"),
-      }
 
-      Measurement::VPower => match iteration % 5 {
-        0 => {
-          self.write_reg(0x02, 0x0C);
-        }
-        1 => {
-          self.write_reg(0x02, 0x10 | 0x0C);
-        }
-        2 => {
-          self.write_reg(0x02, 0x20 | 0x0C);
-        }
-        3 => {
-          self.write_reg(0x02, 0x30 | 0x0C);
-        }
-        4 => {
-          self.write_reg(0x02, 0x40 | 0x0C);
-        }
         _ => fail!("Failed register write — could not mod iteration"),
       },
-      Measurement::IPower => match iteration % 2 {
-        0 => {
-          self.write_reg(0x02, 0x0C);
-        }
-        1 => {
-          self.write_reg(0x02, 0x10 | 0x0C);
-        }
-        _ => fail!("Failed register write — could not mod iteration"),
-      },
+
       Measurement::Rtd => match iteration % 2 {
         0 => {
           self.write_reg(0x02, 0x12);
@@ -328,19 +301,6 @@ impl ADC {
         }
         _ => fail!("Failed register write — could not mod iteration"),
       },
-
-      // Measurement::DiffSensors => match iteration % 3 {
-      //   0 => {
-      //     self.write_reg(0x02, 0x54);
-      //   }
-      //   1 => {
-      //     self.write_reg(0x02, 0x32);
-      //   }
-      //   2 => {
-      //     self.write_reg(0x02, 0x10);
-      //   }
-      //   _ => fail!("Failed register write — could not mod iteration"),
-      // },
 
       Measurement::DiffSensors => match iteration % 2 {
         0 => {
@@ -354,23 +314,7 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::Tc1 | Measurement::Tc2 => match iteration % 4 {
-        0 => {
-          self.write_reg(0x03, 0x08);
-          self.write_reg(0x09, 0x40);
-        }
-        1 => {
-          self.write_reg(0x02, 0x50 | 0x04);
-        }
-        2 => {
-          self.write_reg(0x02, 0x30 | 0x02);
-        }
-        3 => {
-          self.write_reg(0x02, 0x10);
-        }
-        _ => fail!("Failed register write — could not mod iteration"),
-      },
-      
+      _ => fail!("Invalid measurement provided")
     }
   }
 

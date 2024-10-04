@@ -313,7 +313,7 @@ impl State {
                       Low => current_sel_pin.digital_write(High),
                       High => current_sel_pin.digital_write(Low),
                     }
-
+                    
                     (v, t)
                   },
                   _ => adc.get_adc_reading(i)
