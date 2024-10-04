@@ -252,27 +252,41 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::IValve | Measurement::VValve => match iteration % 6 {
+      Measurement::VValve => match iteration % 6 {
         0 => {
-          self.write_reg(0x02, 0x50 | 0x0C);
+          self.write_reg(0x02, 0x0C);
         }
         1 => {
-          self.write_reg(0x02, 0x40 | 0x0C);
-        }
-        2 => {
-          self.write_reg(0x02, 0x30 | 0x0C);
-        }
-        3 => {
-          self.write_reg(0x02, 0x20 | 0x0C);
-        }
-        4 => {
           self.write_reg(0x02, 0x10 | 0x0C);
         }
+        2 => {
+          self.write_reg(0x02, 0x20 | 0x0C);
+        }
+        3 => {
+          self.write_reg(0x02, 0x30 | 0x0C);
+        }
+        4 => {
+          self.write_reg(0x02, 0x40 | 0x0C);
+        }
         5 => {
-          self.write_reg(0x02, 0x0C);
+          self.write_reg(0x02, 0x50 | 0x0C);
         }
         _ => fail!("Failed register write — could not mod iteration"),
       },
+
+      Measurement::IValve => match iteration % 6 {
+        0 | 1 => {
+          self.write_reg(0x02, 0x0C);
+        },
+
+        2 | 3 => {
+          self.write_reg(0x02, 0x10 | 0x0C);
+        },
+
+        4 | 5 => {
+          self.write_reg(0x02, 0x20 | 0x0C);
+        }
+      }
 
       Measurement::VPower => match iteration % 5 {
         0 => {
@@ -313,16 +327,28 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::DiffSensors => match iteration % 3 {
+      // Measurement::DiffSensors => match iteration % 3 {
+      //   0 => {
+      //     self.write_reg(0x02, 0x54);
+      //   }
+      //   1 => {
+      //     self.write_reg(0x02, 0x32);
+      //   }
+      //   2 => {
+      //     self.write_reg(0x02, 0x10);
+      //   }
+      //   _ => fail!("Failed register write — could not mod iteration"),
+      // },
+
+      Measurement::DiffSensors => match iteration % 2 {
         0 => {
-          self.write_reg(0x02, 0x54);
-        }
+          self.write_reg(0x02, 0x01);
+        },
+
         1 => {
-          self.write_reg(0x02, 0x32);
-        }
-        2 => {
-          self.write_reg(0x02, 0x10);
-        }
+          self.write_reg(0x02, 0x23);
+        },
+
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
