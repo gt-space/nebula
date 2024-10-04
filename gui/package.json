@@ -8,7 +8,8 @@
     "build": "vite build",
     "serve": "vite preview",
     "tauri": "tauri",
-    "install:platform": "node install-platform.js"
+    "install:platform": "node install-platform.js",
+    "format": "prettier --write ."
   },
   "license": "MIT",
   "devDependencies": {
@@ -16,6 +17,7 @@
     "@playwright/test": "^1.46.1",
     "@tauri-apps/cli": "^1.5.2",
     "@types/node": "^18.19.21",
+    "prettier": "^3.3.3",
     "playwright": "^1.46.1",
     "typescript": "^4.9.5",
     "vite": "^4.4.9",
