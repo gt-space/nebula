@@ -357,10 +357,16 @@ impl ADC {
     let mut reading;
 
     match self.measurement {
-      Measurement::CurrentLoopPt | Measurement::IValve => {
-        reading = ((value as i32 + 32768) as f64) * (2.5 / ((1 << 15) as f64));
+      Measurement::CurrentLoopPt => {
+        reading = (value as f64) * (2.5 / ((1 << 15) as f64));
         //println!("valve {:?} I: {:?}", (iteration % 6) + 1, reading);
       }
+
+      Measurement::IValve => {
+        reading  = (value as f64) * (2.5 / ((1 << 15) as f64));
+        reading = (reading * 1200.0) / 1560.0;
+      }
+
       Measurement::VPower | Measurement::VValve => {
         reading =
           ((value as i32 + 32768) as f64) * (2.5 / ((1 << 15) as f64)) * 11.0; // 0
