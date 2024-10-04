@@ -334,7 +334,7 @@ impl State {
               }
             };
 
-            println!("{:?} Channel {}: {}", measurement, i, raw_value);
+            
             let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
             data.data_points.push(data_point);
           }
@@ -431,7 +431,7 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
   let mut spi = Spidev::open(bus)?;
   let options = SpidevOptions::new()
       .bits_per_word(8)
-      .max_speed_hz(10_000_000)
+      .max_speed_hz(1_000_000)
       .lsb_first(false)
       .mode(SpiModeFlags::SPI_MODE_1)
       .build();
