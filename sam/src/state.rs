@@ -83,6 +83,9 @@ impl State {
 
     match self {
       State::Init => {
+        let valve6 = data.gpio_controllers[0].get_pin(8);
+        valve6.mode(Output);
+        valve6.digital_write(Low);
         /* Create a spidev wrapper to work with
         you call this wrapper to handle and all transfers */
         // let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
