@@ -28,6 +28,12 @@ pub enum Measurement {
   Rtd,
 }
 
+pub enum ADCEnum {
+  ADC(ADC),
+  OnboardADC,
+}
+
+
 pub struct ADC {
   pub measurement: Measurement,
   pub spidev: Rc<Spidev>,
@@ -56,27 +62,42 @@ impl ADC {
   pub fn cs_mappings() -> HashMap<Measurement, usize> {
     let mut cs_gpios: HashMap<Measurement, usize> = HashMap::new();
     cs_gpios.insert(Measurement::CurrentLoopPt, 30);
-    cs_gpios.insert(Measurement::IValve, 4);
-    cs_gpios.insert(Measurement::VValve, 26);
-    cs_gpios.insert(Measurement::VPower, 13);
-    cs_gpios.insert(Measurement::IPower, 15);
-    cs_gpios.insert(Measurement::Tc1, 10);
-    cs_gpios.insert(Measurement::Tc2, 20);
+    cs_gpios.insert(Measurement::IValve, 73); // changed
+    cs_gpios.insert(Measurement::VValve, 75); // changed
+    // cs_gpios.insert(Measurement::VPower, 13);
+    // cs_gpios.insert(Measurement::IPower, 15);
+    // cs_gpios.insert(Measurement::Tc1, 10);
+    // cs_gpios.insert(Measurement::Tc2, 20);
     cs_gpios.insert(Measurement::DiffSensors, 16);
-    cs_gpios.insert(Measurement::Rtd, 11);
+    // cs_gpios.insert(Measurement::Rtd, 11);
 
     cs_gpios
   }
 
-  pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
-    // pull old adc HIGH
-    if let Some(old_adc) = prev_adc {
-      if let Some(pin) = self.gpio_mappings.get(&old_adc) {
-        pin.digital_write(High);
-      }
-    }
+  // DO NOT USE THIS FUNCTION
+  // pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
+  //   // pull old adc HIGH
+  //   if let Some(old_adc) = prev_adc {
+  //     if let Some(pin) = self.gpio_mappings.get(&old_adc) {
+  //       pin.digital_write(High);
+  //     }
+  //   }
 
-    // pull new adc LOW
+  //   // pull new adc LOW
+  //   if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+  //     pin.digital_write(Low);
+  //   }
+  // }
+
+  // selects current ADC
+  pub fn pull_cs_high_active_low(&mut self) {
+    if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+      pin.digital_write(High);
+    }
+  }
+
+  // deselects current ADC
+  pub fn pull_cs_low_active_low(&mut self) {
     if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
       pin.digital_write(Low);
     }
@@ -129,6 +150,7 @@ impl ADC {
         self.write_reg(0x04, 0x1E);
         self.write_reg(0x05, 0x0A);
       }
+
     }
 
     // delay for at least 4000*clock period
@@ -230,55 +252,44 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::IValve | Measurement::VValve => match iteration % 6 {
+      Measurement::VValve => match iteration % 6 {
         0 => {
-          self.write_reg(0x02, 0x50 | 0x0C);
+          self.write_reg(0x02, 0x0C);
         }
         1 => {
-          self.write_reg(0x02, 0x40 | 0x0C);
-        }
-        2 => {
-          self.write_reg(0x02, 0x30 | 0x0C);
-        }
-        3 => {
-          self.write_reg(0x02, 0x20 | 0x0C);
-        }
-        4 => {
           self.write_reg(0x02, 0x10 | 0x0C);
         }
+        2 => {
+          self.write_reg(0x02, 0x20 | 0x0C);
+        }
+        3 => {
+          self.write_reg(0x02, 0x30 | 0x0C);
+        }
+        4 => {
+          self.write_reg(0x02, 0x40 | 0x0C);
+        }
         5 => {
-          self.write_reg(0x02, 0x0C);
+          self.write_reg(0x02, 0x50 | 0x0C);
         }
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::VPower => match iteration % 5 {
-        0 => {
+      Measurement::IValve => match iteration % 6 {
+        0 | 1 => {
           self.write_reg(0x02, 0x0C);
-        }
-        1 => {
+        },
+
+        2 | 3 => {
           self.write_reg(0x02, 0x10 | 0x0C);
-        }
-        2 => {
+        },
+
+        4 | 5 => {
           self.write_reg(0x02, 0x20 | 0x0C);
-        }
-        3 => {
-          self.write_reg(0x02, 0x30 | 0x0C);
-        }
-        4 => {
-          self.write_reg(0x02, 0x40 | 0x0C);
-        }
+        },
+
         _ => fail!("Failed register write — could not mod iteration"),
       },
-      Measurement::IPower => match iteration % 2 {
-        0 => {
-          self.write_reg(0x02, 0x0C);
-        }
-        1 => {
-          self.write_reg(0x02, 0x10 | 0x0C);
-        }
-        _ => fail!("Failed register write — could not mod iteration"),
-      },
+
       Measurement::Rtd => match iteration % 2 {
         0 => {
           self.write_reg(0x02, 0x12);
@@ -291,35 +302,19 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::DiffSensors => match iteration % 3 {
+      Measurement::DiffSensors => match iteration % 2 {
         0 => {
-          self.write_reg(0x02, 0x54);
-        }
+          self.write_reg(0x02, 0x01);
+        },
+
         1 => {
-          self.write_reg(0x02, 0x32);
-        }
-        2 => {
-          self.write_reg(0x02, 0x10);
-        }
+          self.write_reg(0x02, 0x23);
+        },
+
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::Tc1 | Measurement::Tc2 => match iteration % 4 {
-        0 => {
-          self.write_reg(0x03, 0x08);
-          self.write_reg(0x09, 0x40);
-        }
-        1 => {
-          self.write_reg(0x02, 0x50 | 0x04);
-        }
-        2 => {
-          self.write_reg(0x02, 0x30 | 0x02);
-        }
-        3 => {
-          self.write_reg(0x02, 0x10);
-        }
-        _ => fail!("Failed register write — could not mod iteration"),
-      },
+      _ => fail!("Invalid measurement provided")
     }
   }
 
@@ -334,12 +329,19 @@ impl ADC {
     let mut reading;
 
     match self.measurement {
-      Measurement::CurrentLoopPt | Measurement::IValve => {
+      Measurement::CurrentLoopPt => {
         reading = (value as f64) * (2.5 / ((1 << 15) as f64));
         //println!("valve {:?} I: {:?}", (iteration % 6) + 1, reading);
       }
+
+      Measurement::IValve => {
+        reading  = (value as f64) * (2.5 / ((1 << 15) as f64));
+        reading = (reading * 1200.0) / 1560.0;
+      }
+
       Measurement::VPower | Measurement::VValve => {
-        reading = (value as f64) * (2.5 / ((1 << 15) as f64)) * 11.0; // 0
+        reading =
+          ((value as i32 + 32768) as f64) * (2.5 / ((1 << 15) as f64)) * 11.0; // 0
                                                                                // ref
                                                                                // println!("{:?}: {:?}", (iteration % 5) + 1, reading);
                                                                                //println!("valve {:?} V: {:?}", (iteration % 6) + 1, reading);
@@ -374,6 +376,8 @@ impl ADC {
                                                                           // println!("{:?}: {:?}", (iteration % 3) + 1, reading);
       }
     }
+
+    println!("{:?} [{iteration}]: {reading} ({value})", self.measurement);
     reading
   }
 }
@@ -382,99 +386,162 @@ pub fn open_controllers() -> Vec<Arc<Gpio>> {
   (0..=3).map(Gpio::open).collect()
 }
 
-pub fn gpio_controller_mappings(
+pub fn gpio_controller_mappings( // --> whats on the board
   controllers: &[Arc<Gpio>],
 ) -> HashMap<Measurement, Pin> {
-  let cl_pin = controllers[0].get_pin(30);
-  cl_pin.mode(Output);
+  // let cl_pin = controllers[0].get_pin(30);
+  // cl_pin.mode(Output);
 
-  let i_valve_pin = controllers[2].get_pin(4);
-  i_valve_pin.mode(Output);
+  // let i_valve_pin = controllers[2].get_pin(4);
+  // i_valve_pin.mode(Output);
 
-  let v_valve_pin = controllers[0].get_pin(26);
-  v_valve_pin.mode(Output);
+  // let v_valve_pin = controllers[0].get_pin(26);
+  // v_valve_pin.mode(Output);
 
-  let v_power_pin = controllers[2].get_pin(13);
-  v_power_pin.mode(Output);
+  // let v_power_pin = controllers[2].get_pin(13);
+  // v_power_pin.mode(Output);
 
-  let i_power_pin = controllers[2].get_pin(15);
-  i_power_pin.mode(Output);
+  // let i_power_pin = controllers[2].get_pin(15);
+  // i_power_pin.mode(Output);
 
-  let tc_1_pin = controllers[0].get_pin(10);
-  tc_1_pin.mode(Output);
+  // let tc_1_pin = controllers[0].get_pin(10);
+  // tc_1_pin.mode(Output);
 
-  let tc_2_pin = controllers[0].get_pin(20);
-  tc_2_pin.mode(Output);
+  // let tc_2_pin = controllers[0].get_pin(20);
+  // tc_2_pin.mode(Output);
 
-  let diff_pin = controllers[3].get_pin(16);
-  diff_pin.mode(Output);
+  // let diff_pin = controllers[3].get_pin(16);
+  // diff_pin.mode(Output);
 
-  let rtd_pin = controllers[2].get_pin(11);
-  rtd_pin.mode(Output);
+  // let rtd_pin = controllers[2].get_pin(11);
+  // rtd_pin.mode(Output);
+
+    let rtd1_pin = controllers[1].get_pin(28);
+    rtd1_pin.mode(Output);
+
+    let rtd2_pin = controllers[2].get_pin(2);
+    rtd2_pin.mode(Output);
+
+    let rtd3_pin = controllers[2].get_pin(6);
+    rtd3_pin.mode(Output);
+
+    let i_valve_pin = controllers[2].get_pin(9);
+    i_valve_pin.mode(Output);
+
+    let v_valve_pin = controllers[2].get_pin(11);
+    v_valve_pin.mode(Output);
 
   HashMap::from([
-    (Measurement::CurrentLoopPt, cl_pin),
+    //(Measurement::CurrentLoopPt, cl_pin), // dedicated CS pin ?
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
-    (Measurement::VPower, v_power_pin),
-    (Measurement::IPower, i_power_pin),
-    (Measurement::Tc1, tc_1_pin),
-    (Measurement::Tc2, tc_2_pin),
-    (Measurement::DiffSensors, diff_pin),
-    (Measurement::Rtd, rtd_pin),
+    //(Measurement::VPower, v_power_pin),
+    //(Measurement::IPower, i_power_pin),
+    //(Measurement::Tc1, tc_1_pin),
+    //(Measurement::Tc2, tc_2_pin),
+    //(Measurement::DiffSensors, diff_pin), // dedicated CS pin ?
+    (Measurement::Rtd, rtd1_pin),
+    (Measurement::Rtd, rtd2_pin),
+    (Measurement::Rtd, rtd3_pin),
   ])
 }
 
 pub fn data_ready_mappings(
   controllers: &[Arc<Gpio>],
 ) -> HashMap<Measurement, Pin> {
-  let cl_pin = controllers[1].get_pin(28);
+  // let cl_pin = controllers[1].get_pin(28);
+  // cl_pin.mode(Input);
+
+  // let i_valve_pin = controllers[2].get_pin(3);
+  // i_valve_pin.mode(Input);
+
+  // let v_valve_pin = controllers[1].get_pin(12);
+  // v_valve_pin.mode(Input);
+
+  // let v_power_pin = controllers[2].get_pin(12);
+  // v_power_pin.mode(Input);
+
+  // let i_power_pin = controllers[2].get_pin(14);
+  // i_power_pin.mode(Input);
+
+  // let diff_pin = controllers[3].get_pin(15);
+  // diff_pin.mode(Input);
+
+  let cl_pin = controllers[0].get_pin(7);
   cl_pin.mode(Input);
 
-  let i_valve_pin = controllers[2].get_pin(3);
+  let diff_pin = controllers[2].get_pin(14);
+  diff_pin.mode(Input);
+
+  let rtd1_pin = controllers[1].get_pin(18);
+  rtd1_pin.mode(Input);
+
+  let rtd2_pin = controllers[2].get_pin(3);
+  rtd2_pin.mode(Input);
+
+  let rtd3_pin = controllers[2].get_pin(10);
+  rtd3_pin.mode(Input);
+
+  let i_valve_pin = controllers[0].get_pin(14);
   i_valve_pin.mode(Input);
 
-  let v_valve_pin = controllers[1].get_pin(12);
+  let v_valve_pin = controllers[2].get_pin(12);
   v_valve_pin.mode(Input);
-
-  let v_power_pin = controllers[2].get_pin(12);
-  v_power_pin.mode(Input);
-
-  let i_power_pin = controllers[2].get_pin(14);
-  i_power_pin.mode(Input);
-
-  let diff_pin = controllers[3].get_pin(15);
-  diff_pin.mode(Input);
 
   HashMap::from([
     (Measurement::CurrentLoopPt, cl_pin),
+    (Measurement::DiffSensors, diff_pin),
+    (Measurement::Rtd, rtd1_pin),
+    (Measurement::Rtd, rtd2_pin),
+    (Measurement::Rtd, rtd3_pin),
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
-    (Measurement::VPower, v_power_pin),
-    (Measurement::IPower, i_power_pin),
-    (Measurement::DiffSensors, diff_pin),
+    // (Measurement::VPower, v_power_pin),
+    // (Measurement::IPower, i_power_pin),
   ])
 }
 
-pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) {
+pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) { // --> whats on the board
   let pins = vec![
-    controllers[0].get_pin(30),
-    controllers[2].get_pin(4),
-    controllers[0].get_pin(26),
-    controllers[2].get_pin(13),
-    controllers[2].get_pin(15),
-    controllers[0].get_pin(10),
-    controllers[0].get_pin(20),
-    controllers[3].get_pin(16),
+    // controllers[0].get_pin(30),
+    // controllers[2].get_pin(4),
+    // controllers[0].get_pin(26),
+    // controllers[2].get_pin(13),
+    // controllers[2].get_pin(15),
+    // controllers[0].get_pin(10),
+    // controllers[0].get_pin(20),
+    // controllers[3].get_pin(16),
+    // controllers[2].get_pin(11),
+    // controllers[0].get_pin(5),
+    // controllers[0].get_pin(13),
+    // controllers[0].get_pin(23),
+    // controllers[2].get_pin(23),
+    controllers[1].get_pin(28),
+    controllers[2].get_pin(2),
+    controllers[2].get_pin(6),
+    controllers[2].get_pin(9),
     controllers[2].get_pin(11),
-    controllers[0].get_pin(5),
-    controllers[0].get_pin(13),
-    controllers[0].get_pin(23),
-    controllers[2].get_pin(23),
   ];
 
   for pin in pins.iter() {
     pin.mode(Output);
     pin.digital_write(High);
   }
+}
+
+// check pin numbers
+pub fn init_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
+  let sel1 = controllers[0].get_pin(30);
+  sel1.mode(Output);
+  sel1.digital_write(Low);
+
+  let sel2 = controllers[2].get_pin(15);
+  sel2.mode(Output);
+  sel2.digital_write(Low);
+
+  let sel3 = controllers[3].get_pin(21);
+  sel3.mode(Output);
+  sel3.digital_write(Low);
+
+  [sel1, sel2, sel3]
 }
