@@ -341,7 +341,7 @@ impl ADC {
 
       Measurement::VPower | Measurement::VValve => {
         reading =
-          ((value as i32 + 32768) as f64) * (2.5 / ((1 << 15) as f64)) * 11.0; // 0
+          (value as f64) * (2.5 / ((1 << 15) as f64)) * 11.0; // 0
                                                                                // ref
                                                                                // println!("{:?}: {:?}", (iteration % 5) + 1, reading);
                                                                                //println!("valve {:?} V: {:?}", (iteration % 6) + 1, reading);
