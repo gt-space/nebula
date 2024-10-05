@@ -159,7 +159,7 @@ impl State {
         data.adcs = Some(vec![
           ds,
           cl,
-          // vvalve,
+          vvalve,
           ivalve,
           pwr
         ]);
@@ -170,7 +170,7 @@ impl State {
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
 
-        State::InitAdcs
+        State::DeviceDiscovery
       }
 
       State::DeviceDiscovery => {
@@ -273,7 +273,7 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::PollAdcs
+        State::Identity
       }
 
       State::PollAdcs => {
