@@ -1,24 +1,23 @@
 use crate::{
   interface,
-  server::{flight, Server},
+  server::{flight, Server, Shared},
 };
 use clap::ArgMatches;
 use std::io;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Function used to convert std::future::pending to a join handle in the serve
-/// functions selection of a shutdown task.
-///
-/// In theory this can be converted to checking a value in shared every X unit
-/// of time if we wish to allow the GUI to shut down servo and thus the command
-/// simple set the value to quit / true / etc. (Potential future feature)
+/// functions selection of a shutdown task (In theory this can be converted to
+/// checking a value in shared every X unit of time if we wish to allow the GUI
+/// to shut down servo and thus the command simple set the value to quit / true
+/// / etc) (Potential future feature)
 async fn infinite_hang() -> io::Result<()> {
   std::future::pending::<()>().await;
   Ok(())
 }
 
 /// Performs the necessary setup to connect to the servo server.
-///
 /// This function initializes database connections, spawns background tasks,
 /// and starts the TUI and the HTTP server to serve the application upon
 /// request. It also configures the HTTP server to gracefully shut down if the
@@ -45,12 +44,13 @@ pub fn serve(servo_dir: &Path, args: &ArgMatches) -> anyhow::Result<()> {
 
       // The task that, once finished, will signal the server to terminate.
       // Set to the TUI if it is launched, otherwise set to an infinitely
-      // hanging await that should(?) consume no resources.
-      // let shutdown_task: tokio::task::JoinHandle<io::Result<()>>;
-      let shutdown_task = if !quiet {
-        tokio::spawn(interface::display(server.shared.clone()))
+      // hanging await that should(?) consume no resources
+      let shutdown_task: tokio::task::JoinHandle<io::Result<()>> = if !quiet {
+        tokio::spawn(interface::display(Arc::<Shared>::new(
+          server.shared.clone(),
+        ))) // Launch the TUI
       } else {
-        tokio::spawn(infinite_hang())
+        tokio::spawn(infinite_hang()) // infinite runtime
       };
 
       server.serve(shutdown_task).await

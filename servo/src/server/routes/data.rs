@@ -324,7 +324,7 @@ pub async fn export(
 
       // Get unique file index
       let file_index = EXPORT_FILE_INDEX_ATOMIC
-        .fetch_add(1, Ordering::Relaxed)
+        .fetch_add(1, Ordering::SeqCst)
         .to_string();
 
       // Uneccessary since main should already make it

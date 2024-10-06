@@ -17,9 +17,14 @@ pub mod sequence;
 /// Route functions for setting and deleting triggers.
 pub mod trigger;
 
+/// Route functions for setting and deleting triggers.
+pub mod logging;
+
 pub use admin::*;
 pub use command::*;
 pub use data::*;
 pub use mappings::*;
 pub use sequence::*;
 pub use trigger::*;
+
+pub use logging::*;

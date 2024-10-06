@@ -1,4 +1,5 @@
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, Command};
+use common::comm::{LogCategory, LogType};
 use jeflog::fail;
 use servo::tool;
 use std::{
@@ -123,6 +124,45 @@ fn main() -> anyhow::Result<()> {
         .arg(Arg::new("raw_sql").required(true)),
     )
     .subcommand(
+      Command::new("log")
+        .about("Submits a log to be received by the control server")
+        .arg(
+          Arg::new("log_type")
+            .required(false)
+            .long("type")
+            .short('T')
+            .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+          Arg::new("log_category")
+            .required(false)
+            .long("category")
+            .short('C')
+            .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+          Arg::new("source")
+            .required(false)
+            .long("source")
+            .short('S')
+            .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+          Arg::new("contents")
+            .required(false)
+            .long("body")
+            .short('B')
+            .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+          Arg::new("header")
+            .required(false)
+            .long("header")
+            .short('H')
+            .value_parser(clap::value_parser!(String)),
+        )
+    )
+    .subcommand(
       Command::new("upload")
         .about("Uploads a Python sequence to the control server to be stored for future use.")
         .arg(
@@ -142,6 +182,25 @@ fn main() -> anyhow::Result<()> {
         args.get_one::<f64>("from").copied(),
         args.get_one::<f64>("to").copied(),
         args.get_one::<String>("output_path").unwrap(),
+      )?;
+    }
+    Some(("log", args)) => {
+      tool::log(
+        LogType::from_string(
+          args
+            .get_one::<String>("log_type")
+            .unwrap_or(&String::from(""))
+            .clone(),
+        ),
+        LogCategory::from_string(
+          args
+            .get_one::<String>("log_category")
+            .unwrap_or(&String::from(""))
+            .clone(),
+        ),
+        args.get_one::<String>("source").cloned(),
+        args.get_one::<String>("header").cloned(),
+        args.get_one::<String>("contents").cloned(),
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,

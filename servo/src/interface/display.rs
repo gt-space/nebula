@@ -1,16 +1,26 @@
-use crate::server::Shared;
-use common::comm::CompositeValveState;
+use super::tabs::{home_menu, logs_tab};
+use super::*;
+
+use crate::server::{
+  error::{internal, ServerError},
+  Shared,
+};
 use std::{
-  collections::HashMap,
   error::Error,
   io::{self, Stdout},
+  mem::take,
   ops::Div,
+  sync::atomic::{AtomicU64, Ordering},
   time::{Duration, Instant},
   vec::Vec,
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
-use common::comm::{Measurement, ValveState};
+use common::comm::Sequence;
+use std::string::String;
+
+use tokio::{task::JoinHandle, time::sleep};
+
 use crossterm::{
   event::{
     self,
@@ -18,6 +28,7 @@ use crossterm::{
     EnableMouseCapture,
     Event,
     KeyCode,
+    KeyEventKind,
     KeyModifiers,
   },
   execute,
@@ -29,207 +40,151 @@ use crossterm::{
   },
 };
 use ratatui::{prelude::*, widgets::*};
-use std::string::String;
-use tokio::time::sleep;
 
-const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
+use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
 
-const WHITE: Color = Color::from_u32(0x00eeeeee);
-const BLACK: Color = Color::from_u32(0);
+use unicode_width;
 
-const GREY: Color = Color::from_u32(0x00bbbbbb);
-const DARK_GREY: Color = Color::from_u32(0x00444444);
+use std::sync::Arc;
 
-const DESATURATED_GREEN: Color = Color::from_u32(0x007aff85);
-const DESATURATED_RED: Color = Color::from_u32(0x00ff5959);
-const DESATURATED_BLUE: Color = Color::from_u32(0x0075a8ff);
-
-const YJSP_STYLE: Style = Style::new().bg(Color::from_u32(0)).fg(YJSP_YELLOW);
-
-fn get_state_style(state: ValveState) -> Style {
-  match state {
-    ValveState::Undetermined => YJSP_STYLE.fg(WHITE).bg(DARK_GREY).bold(),
-    ValveState::Disconnected => YJSP_STYLE.fg(BLACK).bg(GREY).bold(),
-    ValveState::Open => YJSP_STYLE.fg(BLACK).bg(DESATURATED_GREEN).bold(),
-    ValveState::Closed => YJSP_STYLE.fg(BLACK).bg(DESATURATED_RED).bold(),
-    ValveState::Fault => YJSP_STYLE.fg(BLACK).bg(DESATURATED_BLUE).bold(),
-  }
-}
-
-fn get_full_row_style(state: ValveState) -> Style {
-  match state {
-    ValveState::Undetermined => YJSP_STYLE.fg(WHITE).bg(DARK_GREY),
-    ValveState::Disconnected => YJSP_STYLE.fg(BLACK).bg(GREY),
-    ValveState::Fault => YJSP_STYLE.fg(BLACK).bg(DESATURATED_RED),
-    _ => YJSP_STYLE.fg(WHITE),
-  }
-}
-
-fn get_valve_name_style(state: ValveState) -> Style {
-  match state {
-    ValveState::Undetermined => YJSP_STYLE.bg(DARK_GREY).bold(),
-    ValveState::Disconnected => YJSP_STYLE.fg(BLACK).bg(GREY).bold(),
-    ValveState::Fault => YJSP_STYLE.bg(DESATURATED_RED).bold(),
-    _ => YJSP_STYLE.bold(),
-  }
-}
-
-struct NamedValue<T: Clone> {
-  name: String,
-  value: T,
-}
-
-impl<T: Clone> NamedValue<T> {
-  fn new(new_name: String, new_value: T) -> NamedValue<T> {
-    NamedValue {
-      name: new_name,
-      value: new_value,
-    }
-  }
-}
-
-/// A fast and stable ordered vector of objects with a corresponding string key
-/// stored in a hashmap.
+/// A atomic (thread safe) object used to give command line sequences unique
+/// ID's
 ///
-/// Used in TUI to hold items grabbed from a hashmap / hashset for a constant
-/// ordering when iterated through and holding historic data.
-///
-/// TODO: This should likely be moved to common after unit testing is made later
-/// down the line.
-struct StringLookupVector<T: Clone> {
-  lookup: HashMap<String, usize>,
-  vector: Vec<NamedValue<T>>,
-}
+/// May be replaced by a universal sequence ID'ing system for better logging
+static COMMAND_INDEX_ATOMIC: AtomicU64 = AtomicU64::new(0);
 
-struct StringLookupVectorIter<'a, T: Clone> {
-  reference: &'a StringLookupVector<T>,
-  index: usize,
-}
+/// The maximum length of the command log (The actual display of commands and
+/// their results)
+const COMMAND_LOG_MAX_LEN: usize = 25;
 
-impl<'a, T: Clone> Iterator for StringLookupVectorIter<'a, T> {
-  // we will be counting with usize
-  type Item = &'a NamedValue<T>;
+/// The maximum length of command history (autofill / arrow key stuff)
+const COMMAND_HISTORY_MAX_LENGTH: usize = 20;
 
-  // next() is the only required method
-  fn next(&mut self) -> Option<Self::Item> {
-    // Check to see if we've finished counting or not.
-    let out = if self.index < self.reference.vector.len() {
-      Some(self.reference.vector.get(self.index).unwrap())
-    } else {
-      None
-    };
+/// Maximum size of the fildered logs vector
+const FILTERED_LOGS_MAX_SIZE: usize = 64;
 
-    // Increment the index
-    self.index += 1;
-
-    out
+fn get_selected_tab(mode: Modes) -> usize {
+  match mode {
+    Modes::Home => 0,
+    Modes::Logs => 1,
   }
-}
-
-impl<T: Clone> StringLookupVector<T> {
-  const DEFAULT_CAPACITY: usize = 8;
-
-  fn len(&self) -> usize {
-    self.vector.len()
-  }
-
-  /// Creates a new StringLookupVector with a specified capacity
-  fn with_capacity(capacity: usize) -> StringLookupVector<T> {
-    StringLookupVector {
-      lookup: HashMap::<String, usize>::with_capacity(capacity),
-      vector: Vec::<NamedValue<T>>::with_capacity(capacity),
-    }
-  }
-
-  /// Creates a new StringLookupVector with default capacity
-  fn new() -> StringLookupVector<T> {
-    StringLookupVector::with_capacity(StringLookupVector::<T>::DEFAULT_CAPACITY)
-  }
-
-  /// Checks if a key is contained within the StringLookupVector
-  fn contains_key(&self, key: &String) -> bool {
-    self.lookup.contains_key(key)
-  }
-
-  /// Returns true if the object was added, and false if it was replaced
-  fn add(&mut self, name: &String, value: T) {
-    if self.contains_key(name) {
-      self.vector[self.lookup[name]].value = value;
-      return;
-    }
-    self.lookup.insert(name.clone(), self.vector.len());
-    self.vector.push(NamedValue::new(name.clone(), value));
-  }
-
-  /// Sorts the backing vector by name, meaning iterating through this structure
-  /// will go through alphabetical.
-  fn sort_by_name(&mut self) {
-    self.vector.sort_unstable_by_key(|x| x.name.to_string());
-    for i in 0..self.vector.len() {
-      // Key has to exist by the nature of this structure
-      *self.lookup.get_mut(&self.vector[i].name).unwrap() = i;
-    }
-  }
-
-  /// Gets a mutable reference to the item with the given key.
-  /// Panics if the key is not valid
-  fn get_mut(&mut self, key: &String) -> Option<&mut NamedValue<T>> {
-    let index = self.lookup.get(key);
-    match index {
-      Some(x) => self.vector.get_mut(*x),
-      None => None,
-    }
-  }
-
-  fn iter(&self) -> StringLookupVectorIter<T> {
-    StringLookupVectorIter::<T> {
-      reference: self,
-      index: 0,
-    }
-  }
-}
-
-#[derive(Clone)]
-struct FullValveDatapoint {
-  voltage: f64,
-  current: f64,
-  knows_voltage: bool,
-  knows_current: bool,
-  rolling_voltage_average: f64,
-  rolling_current_average: f64,
-  state: CompositeValveState,
-}
-
-#[derive(Clone)]
-struct SensorDatapoint {
-  measurement: Measurement,
-  rolling_average: f64,
-}
-
-#[derive(Clone)]
-struct SystemDatapoint {
-  cpu_usage: f32,
-  mem_usage: f32,
-}
-
-struct TuiData {
-  sensors: StringLookupVector<SensorDatapoint>,
-  valves: StringLookupVector<FullValveDatapoint>,
-  system_data: StringLookupVector<SystemDatapoint>,
 }
 
 impl TuiData {
-  fn new() -> TuiData {
-    TuiData {
-      sensors: StringLookupVector::<SensorDatapoint>::new(),
-      valves: StringLookupVector::<FullValveDatapoint>::new(),
-      system_data: StringLookupVector::<SystemDatapoint>::new(),
+  async fn attempt_progress_sequence_queue(&mut self, shared: &Arc<Shared>) {
+    // move out of reference
+    let mv_curr_sequence: Option<JoinHandle<Result<(), ServerError>>> =
+      take(&mut self.curr_sequence);
+
+    // do logic
+    match mv_curr_sequence {
+      Some(handle) => {
+        if handle.is_finished() {
+          let result = handle.await;
+          let command_res: SequenceSendResults;
+          if result.is_ok() {
+            if result.unwrap().is_ok() {
+              command_res = SequenceSendResults::Sent
+            } else {
+              command_res = SequenceSendResults::FailedSend
+            }
+          } else {
+            command_res = SequenceSendResults::FailedSend
+          }
+
+          {
+            let mut logs = shared.logs.0.lock().await;
+            logs.log_here(
+              if command_res == SequenceSendResults::FailedSend {
+                LogType::Error
+              } else {
+                LogType::Success
+              },
+              LogCategory::Sequences,
+              format!(
+                "{} Command {} to flight",
+                match command_res {
+                  SequenceSendResults::Sent => "Successfully Sent",
+                  SequenceSendResults::FailedSend => "Failed to Send",
+                  _ => "Unexpected Result for Sending",
+                },
+                self.curr_sequence_id
+              ),
+              String::new(),
+            );
+          }
+
+          for command in &mut self.command_log {
+            if command.id == self.curr_sequence_id {
+              command.result = command_res;
+              break;
+            }
+          }
+          self.curr_sequence = None;
+        } else {
+          // put it back if it's not done
+          self.curr_sequence = Some(handle);
+        }
+      }
+      None => {
+        if !self.sequence_queue.is_empty() {
+          let sequence = self.sequence_queue.pop_front().unwrap();
+
+          let sequence_id: u64 =
+            COMMAND_INDEX_ATOMIC.fetch_add(1, Ordering::SeqCst);
+          self.curr_sequence_id = sequence_id;
+
+          {
+            let mut logs = shared.logs.0.lock().await;
+            logs.log_here(
+              LogType::Standard,
+              LogCategory::Sequences,
+              format!("Sending Command {} to flight", self.curr_sequence_id),
+              sequence.script.clone(),
+            );
+          }
+          self.command_log.push_front(ExecutedCommandStruct {
+            script: sequence.script.clone(),
+            id: sequence_id,
+            result: SequenceSendResults::NoResult,
+          });
+          if self.command_log.len() > COMMAND_LOG_MAX_LEN {
+            self.command_log.pop_back();
+          }
+          self.curr_sequence =
+            Some(tokio::spawn(send_sequence(sequence, shared.clone())));
+        }
+      }
+    }
+  }
+
+  // WARNING : in it's current state this WILL freeze up anything that attempts
+  // to log anything until it is finished This means that if it takes a long
+  // time to filter, it will jam up any system that uses logs in series
+  async fn update_filtered_logs(&mut self, shared: &Shared) {
+    // get logs
+    let logs = shared.logs.0.lock().await;
+    // if logs are
+    if !logs.updated_since(self.last_log_count) {
+      return;
+    }
+    self.last_log_count = logs.log_count();
+    self.filtered_logs.clear();
+    for log in logs.rev_iter(Some(FILTERED_LOGS_MAX_SIZE)) {
+      // you'd do filtering here but I'm just not gonna rn
+      self.filtered_logs.push(log.clone());
+
+      // if past how many are allowed to be here at once, return
+      if self.filtered_logs.len() > FILTERED_LOGS_MAX_SIZE {
+        break;
+      }
     }
   }
 }
 
 /// Updates the backing tui_data instance that is used in the rendering
-/// functions.
+/// functions
 async fn update_information(
   tui_data: &mut TuiData,
   shared: &Shared,
@@ -253,8 +208,11 @@ async fn update_information(
     );
   }
 
-  let servo_usage: &mut SystemDatapoint =
-    &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
+  let servo_usage: &mut SystemDatapoint = &mut tui_data
+    .system_data
+    .get_mut(&hostname)
+    .expect("Already checked before. so this should never be invalid")
+    .value;
 
   servo_usage.cpu_usage = system
     .cpus()
@@ -265,6 +223,8 @@ async fn update_information(
   servo_usage.mem_usage =
     system.used_memory() as f32 / system.total_memory() as f32 * 100.0;
 
+  tui_data.update_filtered_logs(shared).await;
+
   // display sensor data
   let vehicle_state = shared.vehicle.0.lock().await.clone();
 
@@ -272,8 +232,8 @@ async fn update_information(
     vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
-  let mut sort_needed = false;
 
+  let mut sort_needed = false;
   for (name, value) in valve_states {
     match tui_data.valves.get_mut(name) {
       Some(x) => x.value.state = value.clone(),
@@ -294,24 +254,19 @@ async fn update_information(
       }
     }
   }
-
   if sort_needed {
     tui_data.valves.sort_by_name();
   }
-
   const CURRENT_SUFFIX: &str = "_I";
   const VOLTAGE_SUFFIX: &str = "_V";
-  sort_needed = true;
-
+  sort_needed = false;
   for (name, value) in sensor_readings {
     if name.len() > 2 {
       if name.ends_with(CURRENT_SUFFIX) {
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
-
         if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
           valve_datapoint.value.current = value.value;
-
           if !valve_datapoint.value.knows_current {
             valve_datapoint.value.rolling_current_average = value.value;
             valve_datapoint.value.knows_current = true;
@@ -324,10 +279,8 @@ async fn update_information(
       } else if name.ends_with(VOLTAGE_SUFFIX) {
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
-
         if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
           valve_datapoint.value.voltage = value.value;
-
           if !valve_datapoint.value.knows_voltage {
             valve_datapoint.value.rolling_voltage_average = value.value;
             valve_datapoint.value.knows_voltage = true;
@@ -335,12 +288,10 @@ async fn update_information(
             valve_datapoint.value.rolling_voltage_average *= 0.8;
             valve_datapoint.value.rolling_voltage_average += 0.2 * value.value;
           }
-
           continue;
         }
       }
     }
-
     match tui_data.sensors.get_mut(name) {
       Some(x) => {
         x.value.measurement = value.clone();
@@ -364,57 +315,164 @@ async fn update_information(
   }
 }
 
+fn handle_key_console(key: crossterm::event::KeyEvent, tui_data: &mut TuiData) {
+  // One press only commands
+  if key.kind == KeyEventKind::Press {
+    match key.code {
+      KeyCode::Enter => {
+        // If currently looking at history, take that instead
+        if let Some(x) = tui_data.command_history_selected {
+          tui_data.console_input =
+            Input::new(tui_data.command_history[x].clone());
+          tui_data.command_history_selected = None;
+        }
+
+        let input = tui_data.console_input.value();
+
+        if !input.is_empty() {
+          // Send data to flight in async method later (queue it up)
+          let sequence: Sequence = Sequence {
+            name: String::from("manual"),
+            script: String::from(input),
+          };
+          tui_data.sequence_queue.push_back(sequence);
+
+          // Save to history if not a dup of last
+          if tui_data.command_history.is_empty()
+            || tui_data.command_history[0] != input
+          {
+            // Not worth optimizing
+            tui_data.command_history.insert(0, String::from(input));
+            while tui_data.command_history.len() > COMMAND_HISTORY_MAX_LENGTH {
+              tui_data.command_history.pop();
+            }
+          }
+          tui_data.console_input.reset();
+        }
+      }
+      KeyCode::Up => match tui_data.command_history_selected {
+        Some(x) => {
+          if x + 1 < tui_data.command_history.len() {
+            tui_data.command_history_selected = Some(x + 1);
+          }
+        }
+        None => {
+          if !tui_data.command_history.is_empty() {
+            tui_data.command_history_selected = Some(0);
+          }
+        }
+      },
+      KeyCode::Down => {
+        if let Some(x) = tui_data.command_history_selected {
+          if x > 0 {
+            tui_data.command_history_selected = Some(x - 1);
+          } else {
+            tui_data.command_history_selected = None;
+          }
+        }
+      }
+      KeyCode::Esc => tui_data.console_state = TUIConsoleState::Hidden,
+      _ => {
+        // If currently looking at history, use that instead
+        if let Some(x) = tui_data.command_history_selected {
+          tui_data.console_input =
+            Input::new(tui_data.command_history[x].clone());
+          tui_data.command_history_selected = None;
+        }
+        tui_data.console_input.handle_event(&Event::Key(key));
+      }
+    }
+  } else {
+    tui_data.console_input.handle_event(&Event::Key(key));
+  }
+}
+
 /// A function called every display round that draws the ui and handles user
-/// input.
-///
-/// This was removed from display due to certain functions returning generic
+/// input removed from display due to certain functions returning generic
 /// errors, which cause the serializer to have an aneurysm and thus not work
 /// with async.
 fn display_round(
   terminal: &mut Terminal<CrosstermBackend<Stdout>>,
   tui_data: &mut TuiData,
-  selected_tab: &mut usize,
   tick_rate: Duration,
   last_tick: &mut Instant,
 ) -> bool {
+  // Increment the frame
+  tui_data.frame += 1;
+
   // Draw the TUI
-  let _ = terminal.draw(|f| servo_ui(f, *selected_tab, tui_data));
+  let _ = terminal.draw(|f| servo_ui(f, tui_data));
 
   // Handle user input
-  {
-    // This is really overly drawn out, but it's manual error handling handled
-    // internally to ensure that the generic "Error" returned doesn't mess with
-    // async requirements.
-    let poll_res = crossterm::event::poll(Duration::from_millis(0));
-
-    if poll_res.is_err() {
-      println!("Input polling failed : ");
-      println!("{}", poll_res.unwrap_err());
-      return false;
-    }
-    if poll_res.unwrap() {
-      let read_res = event::read();
-      if read_res.is_err() {
-        println!("Input reading failed : ");
-        println!("{}", read_res.unwrap_err());
+  loop {
+    // check for inputs
+    match crossterm::event::poll(Duration::from_millis(0)) {
+      // If there is no input waiting to be handled, quit input handling loop
+      Ok(x) => {
+        if !x {
+          break;
+        }
+      }
+      // If there is an error, log it
+      // TODO : Actually log this error instead of printing
+      Err(err) => {
+        println!("Input polling failed! : ");
+        println!("{}", err);
         return false;
       }
-      // If a quit command is recieved, return false to signal to quit
-      if let Event::Key(key) = read_res.unwrap() {
-        /* if let KeyCode::Char('q') = key.code {
-            return false;
-        }
-        if let KeyCode::Char('Q') = key.code {
-            return false;
-        } */
-        if let KeyCode::Char('c') = key.code {
+    };
+
+    // Read the input
+    let read_res = event::read();
+
+    // If reading failed, big sad, print it
+    if read_res.is_err() {
+      println!("Input reading failed : ");
+      println!("{}", read_res.unwrap_err());
+      return false;
+    }
+    // If a quit command is recieved, return false to signal to quit
+    if let Event::Key(key) = read_res.unwrap() {
+      // We don't care about anything but key presses
+      if key.kind != KeyEventKind::Press {
+        continue;
+      }
+      match key.code {
+        KeyCode::Char('c') => {
           if key.modifiers.contains(KeyModifiers::CONTROL) {
             return false;
+          } else if tui_data.console_state != TUIConsoleState::Hidden {
+            handle_key_console(key, tui_data);
           }
         }
-        if let KeyCode::Char('C') = key.code {
+        KeyCode::Char('C') => {
           if key.modifiers.contains(KeyModifiers::CONTROL) {
             return false;
+          } else if tui_data.console_state != TUIConsoleState::Hidden {
+            handle_key_console(key, tui_data);
+          }
+        }
+        KeyCode::Tab => {
+          tui_data.mode = match tui_data.mode {
+            Modes::Home => Modes::Logs,
+            Modes::Logs => Modes::Home,
+          }
+        }
+        KeyCode::Char('`') => match tui_data.console_state {
+          TUIConsoleState::Hidden => {
+            tui_data.console_state = TUIConsoleState::Flight
+          }
+          _ => handle_key_console(key, tui_data),
+        },
+        KeyCode::Char('~') => match tui_data.console_state {
+          TUIConsoleState::Hidden => {
+            tui_data.console_state = TUIConsoleState::Flight
+          }
+          _ => handle_key_console(key, tui_data),
+        },
+        _ => {
+          if tui_data.console_state != TUIConsoleState::Hidden {
+            handle_key_console(key, tui_data);
           }
         }
       }
@@ -450,9 +508,23 @@ fn restore_terminal(
   Ok(())
 }
 
+// TODO : maybe this shouldn't block the entire time?
+async fn send_sequence(
+  sequence: Sequence,
+  shared: Arc<Shared>,
+) -> Result<(), ServerError> {
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    // Send the sequence to the flight computer
+    flight.send_sequence(sequence).await.map_err(internal)?;
+    Ok(())
+  } else {
+    Err(internal("flight computer not connected"))
+  }
+}
+
 /// The async function that drives the entire TUI.
 /// Returns once it is manually quit (from within display_round)
-pub async fn display(shared: Shared) -> io::Result<()> {
+pub async fn display(shared: Arc<Shared>) -> io::Result<()> {
   // setup terminal
   enable_raw_mode()?;
 
@@ -464,30 +536,70 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 
   let mut system = System::new_all();
 
-  // create tui_data and run the TUI
-  let tick_rate = Duration::from_millis(100);
+  // The minimum duration between the start of each tui tick
+  let tick_rate = Duration::from_millis(25);
+
+  // The data structure that holds almost all information on the tui
   let mut tui_data: TuiData = TuiData::new();
+
+  // Time of last GUI tick
   let mut last_tick = Instant::now();
-  let mut selected_tab: usize = 0;
+
+  // How many GUI ticks should pass between each update information from the
+  // flight computer (used to keep FPS high for the terminal)
+  let update_rate = 4;
+  let mut update_tick = 0;
+
   loop {
-    update_information(&mut tui_data, &shared, &mut system).await;
+    // Duration Tracking Code
+    let update_start_time = Instant::now();
+
+    // Update last_debug_durations and clear debug_durations to be filled this
+    // cycle
+    (tui_data.last_debug_durations, tui_data.debug_durations) =
+      (tui_data.debug_durations, tui_data.last_debug_durations);
+    tui_data.debug_durations.clear();
+
+    tui_data.is_connected =
+      if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        // Send the sequence to the flight computer
+        !flight.check_closed()
+      } else {
+        false
+      };
+
+    if update_tick == 0 {
+      update_information(&mut tui_data, &shared, &mut system).await;
+    }
+    update_tick += 1;
+    update_tick %= update_rate;
+
     // Draw the TUI and handle user input, return if told to.
-    if !display_round(
-      &mut terminal,
-      &mut tui_data,
-      &mut selected_tab,
-      tick_rate,
-      &mut last_tick,
-    ) {
+    if !display_round(&mut terminal, &mut tui_data, tick_rate, &mut last_tick) {
       break;
     }
+    // Handle any sequences that need sending
+    tui_data.attempt_progress_sequence_queue(&shared).await;
+
+    // Determine how long everything took
+
+    let total_duration = update_start_time.elapsed();
+
+    tui_data.debug_durations.push(NamedValue::<Duration>::new(
+      String::from("Total"),
+      total_duration,
+    ));
+
     // Wait until next tick
-    sleep(tick_rate).await;
+    if total_duration < tick_rate {
+      sleep(tick_rate - total_duration).await;
+    }
   }
 
   // Attempt to restore terminal
-  if let Err(error) = restore_terminal(&mut terminal) {
-    return Err(io::Error::new(io::ErrorKind::Other, error.to_string()));
+  let res = restore_terminal(&mut terminal);
+  if let Err(err) = res {
+    return Err(io::Error::new(io::ErrorKind::Other, err.to_string()));
   }
 
   Ok(())
@@ -495,399 +607,147 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 
 /// Basic overhead ui drawing function.
 /// Creates the main overarching tab and then draws the selected tab in the
-/// remaining space.
-fn servo_ui(f: &mut Frame, selected_tab: usize, tui_data: &TuiData) {
-  let chunks: std::rc::Rc<[Rect]> = Layout::default()
+/// remaining space
+fn servo_ui(f: &mut Frame, tui_data: &TuiData) {
+  // Vertically chunk the TUI into rendered regions
+  let vertical_sections: std::rc::Rc<[Rect]> = Layout::default()
     .direction(Direction::Vertical)
-    .constraints([Constraint::Length(3), Constraint::Fill(1)])
+    .constraints(match tui_data.console_state {
+      // chunked as [tabs / debug time, TUI display, internal console (if
+      // applicable)]
+      TUIConsoleState::Hidden => [
+        Constraint::Length(3),
+        Constraint::Fill(1),
+        Constraint::Length(0),
+      ],
+      TUIConsoleState::Flight => [
+        Constraint::Length(3),
+        Constraint::Fill(1),
+        Constraint::Length(3),
+      ],
+    })
     .split(f.size());
 
-  let tab_menu = Tabs::new(vec!["Home", "Unused", "Unused"])
-    .block(Block::default().title("Tabs").borders(Borders::ALL))
-    .style(YJSP_STYLE)
-    .highlight_style(YJSP_STYLE.fg(WHITE).bold())
-    .select(selected_tab)
-    .divider(symbols::line::VERTICAL);
+  upper_tui_section(f, vertical_sections[0], tui_data);
 
-  f.render_widget(tab_menu, chunks[0]);
-
-  match selected_tab {
-    0 => home_menu(f, chunks[1], tui_data),
-    _ => bad_tab(f, chunks[1]),
+  match tui_data.mode {
+    Modes::Home => home_menu(f, vertical_sections[1], tui_data),
+    Modes::Logs => logs_tab(f, vertical_sections[1], tui_data),
+    _ => draw_empty(f, vertical_sections[1]),
   };
+
+  if tui_data.console_state != TUIConsoleState::Hidden {
+    // Draw the console
+    let console_area = draw_sub_console(f, vertical_sections[2], tui_data);
+
+    // 2 of the width is for borders and 1 is for cursor
+    let width = console_area.width.max(3) - 3;
+    let scroll = tui_data.console_input.visual_scroll(width as usize);
+
+    let cursor = match tui_data.command_history_selected {
+      Some(x) => unicode_width::UnicodeWidthStr::width(
+        tui_data.command_history[x]
+          .get(0..tui_data.command_history[x].len())
+          .unwrap(),
+      ),
+      None => tui_data.console_input.visual_cursor(),
+    };
+
+    // Put cursor inside of command line to communicate editting
+    //    Currently flashes wildly as it will turn on whenever the TUI updates
+    //    very low priority change to fix it though
+    f.set_cursor(
+      // Put cursor past the end of the input text
+      console_area.x + ((cursor).max(scroll) - scroll) as u16 + 1,
+      // Move one line down, from the border to the input line
+      console_area.y + 1,
+    );
+  }
 }
 
-/// Tab render function used when the selected tab is invalid
-fn bad_tab(_: &mut Frame, _: Rect) {}
+/// Renders the top section of the tui containing tabs and any debug
+/// information.
+fn upper_tui_section(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+  // Make room for displaying debug durations
+  let mut upper_constraints = vec![Constraint::Fill(1)];
+  upper_constraints.extend(
+    [Constraint::Length(10)].repeat(tui_data.last_debug_durations.len()),
+  );
 
-/// Home tab render function displaying
-/// System, Valves, and Sensor Information
-fn home_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+  let upper_tab: std::rc::Rc<[Rect]> = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints(upper_constraints)
+    .split(area);
+
+  // Padding is written into the actual strings here instead of using the built
+  // in version in Tabs, as Tabs' padding does not take on the style of the
+  // text within, Which we use to indicate selection
+  let tab_menu = Tabs::new(vec![" Home ", " Logs ", " Unused "])
+    .block(Block::default().title("Tabs").borders(Borders::ALL))
+    .style(YJSP_STYLE)
+    .highlight_style(YJSP_STYLE.bg(YJSP_YELLOW).fg(BLACK).bold())
+    .select(get_selected_tab(tui_data.mode))
+    .padding("", "")
+    .divider(symbols::line::VERTICAL);
+
+  f.render_widget(tab_menu, upper_tab[0]);
+
+  for (index, debug_duration) in
+    tui_data.last_debug_durations.iter().enumerate()
+  {
+    let duration_millis = debug_duration.value.as_micros() as f32 / 1000.0;
+
+    let last_update_sector = Paragraph::new(
+      Line::from(format!("{:.1} ms", duration_millis)).right_aligned(),
+    )
+    .block(
+      Block::default()
+        .title(debug_duration.name.clone())
+        .borders(Borders::ALL),
+    )
+    .style(YJSP_STYLE);
+
+    f.render_widget(last_update_sector, upper_tab[index + 1]);
+  }
+}
+
+fn draw_sub_console(f: &mut Frame, area: Rect, tui_data: &TuiData) -> Rect {
+  let border = Block::default()
+    .style(YJSP_STYLE)
+    .title("Console")
+    .borders(Borders::ALL);
+
   let horizontal = Layout::default()
     .direction(Direction::Horizontal)
     .constraints([
       Constraint::Fill(1),
-      Constraint::Length(40),
-      Constraint::Length(75),
-      Constraint::Length(45),
+      Constraint::Length(40 + 75 + 45),
       Constraint::Fill(1),
-    ])
+    ]) // Fill to the identical width of the other stuff
     .split(area);
 
-  // Filler for right side of screen to center actual data
-  draw_empty(f, horizontal[0]);
-
-  // System Info Column
-  draw_system_info(f, horizontal[1], tui_data);
-
-  // Valve Data Column
-  draw_valves(f, horizontal[2], tui_data);
-
-  // Sensor Data Column
-  draw_sensors(f, horizontal[3], tui_data);
-
   // Filler for left side of screen to center actual data
-  draw_empty(f, horizontal[4]);
-}
+  draw_empty(f, horizontal[0]);
+  // Filler for right side of screen to center actual data
+  draw_empty(f, horizontal[2]);
 
-/// Draws an empty table within an area. Used to fill a region with the
-/// YJSP_STYLE's background.
-fn draw_empty(f: &mut Frame, area: Rect) {
-  let widths = [Constraint::Fill(1)];
+  let console_area = &horizontal[1];
 
-  let empty_table: Table<'_> = Table::new(Vec::<Row>::new(), widths)
-    .style(YJSP_STYLE)
-    .header(
-      Row::new(vec![Span::from("").into_centered_line()])
-        .style(Style::new().bold()),
-    );
+  // 2 of the width is for borders and 1 is for cursor
+  let width = console_area.width.max(3) - 3;
+  let scroll = tui_data.console_input.visual_scroll(width as usize);
 
-  f.render_widget(empty_table, area);
-}
+  let text: String = match tui_data.command_history_selected {
+    Some(x) => tui_data.command_history[x].clone(),
+    None => String::from(tui_data.console_input.value()),
+  };
 
-/// Draws system info as listed in tui_data.system_data
-/// See update_information for how this data is gathered
-fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
-  let all_systems: &StringLookupVector<SystemDatapoint> = &tui_data.system_data;
+  let console_display = Paragraph::new(text)
+    .style(YJSP_STYLE.fg(WHITE))
+    .scroll((0, scroll as u16))
+    .block(border);
 
-  // Styles used in table
-  let name_style = YJSP_STYLE.bold();
-  let data_style = YJSP_STYLE.fg(WHITE);
+  f.render_widget(console_display, *console_area);
 
-  // Make rows
-  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
-
-  for name_datapoint_pair in all_systems.iter() {
-    let name: &String = &name_datapoint_pair.name;
-    let datapoint: &SystemDatapoint = &name_datapoint_pair.value;
-
-    // Name of system
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from(name.clone()).into_centered_line()),
-        Cell::from(Span::from("")),
-        Cell::from(Span::from("")),
-      ])
-      .style(name_style),
-    );
-
-    //  CPU Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.cpu_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
-
-    //  Memory Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.mem_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
-  }
-
-  //  ~Fixed size widths that can scale to a smaller window
-  let widths = [Constraint::Max(20), Constraint::Max(12), Constraint::Max(2)];
-
-  //  Make the table itself
-  let sensor_table: Table<'_> = Table::new(rows, widths)
-    .style(name_style)
-    // It has an optional header, which is simply a Row always visible at the
-    // top.
-    .header(
-      Row::new(vec![
-        Span::from("Name").into_centered_line(),
-        Span::from("Value").into_centered_line(),
-        Line::from(""),
-      ])
-      .style(Style::new().bold())
-      // To add space between the header and the rest of the rows, specify the
-      // margin
-      .bottom_margin(1),
-    )
-    // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Systems").borders(Borders::ALL))
-    // The selected row and its content can also be styled.
-    .highlight_style(Style::new().reversed())
-    // ...and potentially show a symbol in front of the selection.
-    .highlight_symbol(">>");
-
-  f.render_widget(sensor_table, area);
-}
-
-/// Draws valve states as listed in tui_data.valves
-/// See update_information for how this data is gathered
-fn draw_valves(f: &mut Frame, area: Rect, tui_data: &TuiData) {
-  //  Get valve states from TUI
-  let full_valves: &StringLookupVector<FullValveDatapoint> = &tui_data.valves;
-
-  // Make rows
-  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(full_valves.len());
-  for pair in full_valves.iter() {
-    let name = &pair.name;
-    let datapoint = &pair.value;
-
-    // Get base style used in this row based on the actual (derived) state of
-    // the valve
-    let normal_style = get_full_row_style(datapoint.state.actual);
-    let name_style = get_valve_name_style(datapoint.state.actual);
-
-    // Determine rolling change of voltage and current via value - rolling
-    // average of value as calculated by update_information. And color code the
-    // change based on it's magnitude and sign (increasing / decreasing). Color
-    // coding is based on fixed thresholds set for voltage and current
-    // independently.
-    let d_v = datapoint.voltage - datapoint.rolling_voltage_average;
-    let d_v_style: Style;
-    if d_v.abs() < 0.1 {
-      d_v_style = normal_style;
-    } else if d_v > 0.0 {
-      d_v_style = normal_style.fg(Color::Green);
-    } else {
-      d_v_style = normal_style.fg(Color::Red);
-    }
-
-    let d_i: f64 = datapoint.current - datapoint.rolling_current_average;
-    let d_i_style: Style;
-    if d_i.abs() < 0.025 {
-      d_i_style = normal_style;
-    } else if d_i > 0.0 {
-      d_i_style = normal_style.fg(Color::Green);
-    } else {
-      d_i_style = normal_style.fg(Color::Red);
-    }
-
-    let voltage_rows = if datapoint.knows_voltage {
-      [
-        Cell::from(
-          Span::from(format!("{:.2}", datapoint.voltage))
-            .into_right_aligned_line(),
-        ), // Voltage
-        Cell::from(
-          Span::from(format!("{:+.3}", d_v)).into_right_aligned_line(),
-        )
-        .style(d_v_style),
-      ]
-    } else {
-      [Cell::from(""), Cell::from("")]
-    };
-
-    let current_rows = if datapoint.knows_current {
-      [
-        Cell::from(
-          Span::from(format!("{:.3}", datapoint.current))
-            .into_right_aligned_line(),
-        ), // Current
-        Cell::from(
-          Span::from(format!("{:+.3}", d_i)).into_right_aligned_line(),
-        )
-        .style(d_i_style), // Rolling change of current
-      ]
-    } else {
-      [Cell::from(""), Cell::from("")]
-    };
-
-    // Make the actual row of info
-    rows.push(
-      Row::new(vec![
-        Cell::from(
-          Span::from(name.clone())
-            .into_centered_line()
-            .style(name_style),
-        ), // Name of Valve
-        voltage_rows[0].clone(),
-        voltage_rows[1].clone(),
-        current_rows[0].clone(),
-        current_rows[1].clone(),
-        // Actual / Derived state of valve
-        Cell::from(
-          Span::from(format!("{}", datapoint.state.actual))
-            .into_centered_line(),
-        )
-        .style(get_state_style(datapoint.state.actual)),
-        // Commanded state of valve
-        Cell::from(
-          Span::from(format!("{}", datapoint.state.commanded))
-            .into_centered_line(),
-        )
-        .style(get_state_style(datapoint.state.commanded)),
-      ])
-      .style(normal_style),
-    );
-  }
-
-  let widths = [
-    Constraint::Length(12),
-    Constraint::Length(7),
-    Constraint::Length(8),
-    Constraint::Length(8),
-    Constraint::Length(9),
-    Constraint::Length(12),
-    Constraint::Length(12),
-  ];
-
-  let valve_table: Table<'_> = Table::new(rows, widths)
-    .style(YJSP_STYLE)
-    // It has an optional header, which is simply a Row always visible at
-    // the top.
-    .header(
-      Row::new(vec![
-        Span::from("Name").into_centered_line(),
-        Span::from("Voltage").into_right_aligned_line(),
-        Line::from(""),
-        Span::from("Current").into_right_aligned_line(),
-        Line::from(""),
-        Span::from("Derived").into_centered_line(),
-        Span::from("Commanded").into_centered_line(),
-      ])
-      .style(Style::new().bold())
-      // To add space between the header and the rest of the rows, specify the
-      // margin
-      .bottom_margin(1),
-    )
-    // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Valves").borders(Borders::ALL))
-    // The selected row and its content can also be styled.
-    .highlight_style(Style::new().reversed())
-    // ...and potentially show a symbol in front of the selection.
-    .highlight_symbol(">>");
-
-  f.render_widget(valve_table, area);
-}
-
-/// Draws sensors as listed in tui_data.sensors
-/// See update_information for how this data is gathered
-fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
-  //  Get sensor measurements from TUI
-  let full_sensors: &StringLookupVector<SensorDatapoint> = &tui_data.sensors;
-
-  //  Styles used in table
-  let normal_style = YJSP_STYLE;
-  let data_style = normal_style.fg(WHITE);
-
-  //  Make rows
-  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(full_sensors.len());
-
-  for name_datapoint_pair in full_sensors.iter() {
-    let name: &String = &name_datapoint_pair.name;
-    let datapoint: &SensorDatapoint = &name_datapoint_pair.value;
-
-    // Determine rolling change of the measurement value via value - rolling
-    // average of value as calculated by update_information
-    // And color code the change based on it's magnitude and sign
-    // (increasing / decreasing)
-    let d_v = datapoint.measurement.value - datapoint.rolling_average;
-    let d_v_style: Style;
-
-    // As values can have vastly differing units, the color code change is 1%
-    // of the value, with a minimum change threshold of 0.01 if the value is
-    // less than 1
-    let value_magnitude_min: f64 = 1.0;
-    let value_magnitude =
-      datapoint.rolling_average.abs().max(value_magnitude_min);
-
-    // If the change is > 1% the rolling averages value, then it's considered
-    // significant enough to highlight. Since sensors have a bigger potential
-    // range, a flat delta threshold is a bad idea as it would require
-    // configuration.
-    if d_v.abs() / value_magnitude < 0.01 {
-      d_v_style = data_style;
-    } else if d_v > 0.0 {
-      d_v_style = normal_style.fg(Color::Green);
-    } else {
-      d_v_style = normal_style.fg(Color::Red);
-    }
-
-    rows.push(
-      Row::new(vec![
-        Cell::from(
-          Span::from(name.clone())
-            .style(normal_style)
-            .bold()
-            .into_right_aligned_line(),
-        ), // Sensor Name
-        Cell::from(
-          Span::from(format!("{:.3}", datapoint.measurement.value))
-            .into_right_aligned_line()
-            .style(data_style),
-        ), // Measurement value
-        Cell::from(
-          Span::from(format!("{}", datapoint.measurement.unit))
-            .into_left_aligned_line()
-            .style(data_style.fg(GREY)),
-        ), // Measurement unit
-        Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-          .style(d_v_style), /* Rolling Change of value (see
-                              * update_information) */
-      ])
-      .style(normal_style),
-    );
-  }
-
-  //  ~Fixed Lengths with some room to expand
-  let widths = [
-    Constraint::Min(12),
-    Constraint::Min(10),
-    Constraint::Length(5),
-    Constraint::Min(14),
-  ];
-
-  //  Make the table itself
-  let sensor_table: Table<'_> = Table::new(rows, widths)
-    .style(normal_style)
-    // It has an optional header, which is simply a Row always visible at the
-    // top.
-    .header(
-      Row::new(vec![
-        Span::from("Name").into_right_aligned_line(),
-        Span::from("Value").into_right_aligned_line(),
-        Span::from("Unit").into_centered_line(),
-        Span::from("Rolling Change").into_centered_line(),
-      ])
-      .style(Style::new().bold())
-      // To add space between the header and the rest of the rows, specify the
-      // margin
-      .bottom_margin(1),
-    )
-    // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Sensors").borders(Borders::ALL))
-    // The selected row and its content can also be styled.
-    .highlight_style(Style::new().reversed())
-    // ...and potentially show a symbol in front of the selection.
-    .highlight_symbol(">>");
-
-  //  Render
-  f.render_widget(sensor_table, area);
+  *console_area
 }

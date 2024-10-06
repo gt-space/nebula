@@ -1,6 +1,6 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, default, fmt, time::SystemTime};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -218,4 +218,213 @@ pub enum FlightControlMessage {
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,
+}
+
+
+//////// Logging section
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[repr(u8)]
+/// Designates the importance / relevance of a log.
+/// 
+/// - Logs that provide information about the rocket systems should be `Standard`.
+/// - Logs that report errors / aborts / etc should be `Error`.
+/// - Logs that provide information used for debugging other programs should be in `Debug`.
+/// - Logs that declare successes can choose to be a `Success`, although these often belong in `Debug` unless direct feedback is necessary.
+pub enum LogType {
+    /// Type for information that may wish to be filtered out due to low priority (a la debug information)
+    Debug,
+    /// Type for standard logs (Most common)
+    Standard,
+    /// Type for all errors
+    Error,
+    /// Type for meaningful successful events
+    /// 
+    /// Generally should not be used for *all* successes, just things that meaningfuly should be singled out as a "success"
+    Success, 
+}
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[repr(u8)]
+/// Designates the category of a log for at-a-glance understanding of log contents and cheap log content filtering.
+pub enum LogCategory {
+    /// Default if log category is not known / can't be parsed
+    Unknown, 
+    /// Category for all sequence related logs
+    Sequences,
+    /// Category for network events
+    Network,
+    /// Category for valve events
+    Valves,
+    /// Category for sensor events
+    Sensors,
+    /// Catch-all category for events that do not fall into any category that
+    /// is substantial enough to deserve it's own entry.
+    /// 
+    /// Ex : most internal servo errors should simply use "Other" and declare
+    /// the location of errors within their Header
+    Other,
+}
+
+impl LogType {
+    /// Converts the `LogType` into a human readble string.
+    /// 
+    /// `to_short_string()` will return a 3 character version instead
+    pub fn to_string(&self) -> &str {
+        match self {
+            LogType::Debug => "Debug",
+            LogType::Standard => "Standard",
+            LogType::Error => "Error",
+            LogType::Success => "Success",
+        }
+    }
+
+    /// Converts the `LogType` into a 3 character string.
+    /// 
+    /// `to_string()` will return the full version of the string
+    /// 
+    /// Useful when displaying is strict on characters
+    pub fn to_short_string(&self) -> &str {
+        match self {
+            LogType::Debug => "dbg",
+            LogType::Standard => "std",
+            LogType::Error => "err",
+            LogType::Success => "suc",
+        }
+    }
+
+    /// Converts a string (not case sensitive) into a LogType
+    /// 
+    /// Essentially the reverse of to_string and to_short_string
+    pub fn from_string(string : String) -> Option<LogType> {
+      match string.to_lowercase().as_str() {
+        "debug" => Some(LogType::Debug),
+        "standard" => Some(LogType::Standard),
+        "error" => Some(LogType::Error),
+        "success" => Some(LogType::Success),
+        "dbg" => Some(LogType::Debug),
+        "std" => Some(LogType::Standard),
+        "err" => Some(LogType::Error),
+        "scs" => Some(LogType::Success),
+        "d" => Some(LogType::Debug),
+        "st" => Some(LogType::Standard),
+        "e" => Some(LogType::Error),
+        "su" => Some(LogType::Success),
+        _ => None
+      }
+    }
+}
+
+impl LogCategory {
+    /// Converts the `LogCategory` into a human readble string.
+    /// 
+    /// `to_short_string()` will return a 3 character version instead
+    pub fn to_string(&self) -> &str {
+        match self {
+            LogCategory::Unknown => "Unknown",
+            LogCategory::Sequences => "Sequences",
+            LogCategory::Network => "Network",
+            LogCategory::Valves => "Valves",
+            LogCategory::Sensors => "Sensors",
+            LogCategory::Other => "Other",
+        }
+    }
+
+    /// Converts the `LogCategory` into a 3 character string.
+    /// 
+    /// `to_string()` will return the full version of the string
+    /// 
+    /// Useful when displaying is strict on characters
+    pub fn to_short_string(&self) -> &str {
+        match self {
+            LogCategory::Unknown => "???",
+            LogCategory::Sequences => "seq",
+            LogCategory::Network => "net",
+            LogCategory::Valves => "vlv",
+            LogCategory::Sensors => "sns",
+            LogCategory::Other => "oth",
+        }
+    }
+    
+
+    /// Converts a string (not case sensitive) into a LogCategory
+    /// 
+    /// Essentially the reverse of to_string and to_short_string with a few
+    /// new conversions (a la "u" => Unknown)
+    /// 
+    /// Likely will want to automate this for strings and short strings for
+    /// as people may forget to update this table when new categories are added
+    pub fn from_string(string : String) -> Option<LogCategory> {
+      match string.to_lowercase().as_str() {
+        "unknown" => Some(LogCategory::Unknown),
+        "sequences" => Some(LogCategory::Sequences),
+        "network" => Some(LogCategory::Network),
+        "valves" => Some(LogCategory::Valves),
+        "sensors" => Some(LogCategory::Sensors),
+        "other" => Some(LogCategory::Other),
+        "?" => Some(LogCategory::Unknown),
+        "???" => Some(LogCategory::Unknown),
+        "seq" => Some(LogCategory::Sequences),
+        "net" => Some(LogCategory::Network),
+        "vlv" => Some(LogCategory::Valves),
+        "sns" => Some(LogCategory::Sensors),
+        "oth" => Some(LogCategory::Other),
+        "u" => Some(LogCategory::Unknown),
+        "sq" => Some(LogCategory::Sequences),
+        "n" => Some(LogCategory::Network),
+        "v" => Some(LogCategory::Valves),
+        "sn" => Some(LogCategory::Sensors),
+        "o" => Some(LogCategory::Other),
+        _ => None
+      }
+    }
+}
+
+impl fmt::Display for LogType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
+impl fmt::Display for LogCategory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
+
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The structure for all logs received and stored within servo
+/// 
+/// It utilizes a variety of categorization techniques to enable filtering
+/// and ease of displaying information.
+/// 
+/// The primary two places for actual logged data are 
+/// - header : A quick summary of what happened (ex : `Error when excuting script` from flight)
+/// - contents : A long form version of what happened (ex : the actual python output of the failed script)
+pub struct Log {
+    /// The type of the log (see enum)
+    pub log_type : LogType, 
+    /// The category of the log (see enum)
+    pub log_category : LogCategory,
+    /// The time stamp that the log is tied to. 
+    /// 
+    /// Typically this should be as close as possible to when the event that the
+    /// log reports occured, so try to mark it down ASAP.
+    pub time_stamp : SystemTime, 
+    /// The origina of the log, usually is the hostname of the device 
+    /// (a la "sam-01") or the name of the program running (a la "servo")
+    pub source : String,
+    /// The header of the log, printed as the first line of the log 
+    /// (in a different color in Servo). 
+    ///
+    /// Can be left blank to not be included.
+    pub header : String, 
+    /// The contents of the log. 
+    /// 
+    /// Best for logs that cannot reasonably have a 
+    /// header or for more specific details than a header
+    /// 
+    /// Can be left blank to not be included.
+    pub contents : String, 
 }
