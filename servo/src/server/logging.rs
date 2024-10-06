@@ -280,6 +280,11 @@ impl LogsController {
   }
 
   /// Iterate over the last `max_index` Logs from oldest to newest
+  /// 
+  /// max_index is NOT the number of logs.
+  /// 
+  /// This iterator will iterate over either `max_index + 1` or `self.len()`
+  /// logs, whichever is lower.
   pub fn rev_iter(&self, max_index: Option<usize>) -> RevRingBufferIter<Log> {
     self.log_history.rev_iter(max_index)
   }
@@ -292,5 +297,89 @@ impl LogsController {
   /// Determine the number of logs added this session
   pub fn log_count(&self) -> usize {
     self.logs_received
+  }
+}
+
+
+#[cfg(test)]
+mod tests {
+  use std::time::SystemTime;
+  use super::*;
+
+  fn generate_five_sample_logs() -> [Log; 5] {
+    [
+      Log {
+        log_type : LogType::Debug,
+        log_category : LogCategory::Other,
+        time_stamp : SystemTime::now(),
+        source : String::from("debug_tests_a"),
+        header : String::from("This is log 1"),
+        contents : String::from("At least I hope so")
+      },
+      Log {
+        log_type : LogType::Standard,
+        log_category : LogCategory::Unknown,
+        time_stamp : SystemTime::now(),
+        source : String::from("debug_tests_b"),
+        header : String::from("This is log 2"),
+        contents : String::from("if this works")
+      },
+      Log {
+        log_type : LogType::Error,
+        log_category : LogCategory::Sensors,
+        time_stamp : SystemTime::now(),
+        source : String::from("debug_tests_c"),
+        header : String::from("This is log 3"),
+        contents : String::from("Also the hydrogen tank exploded")
+      },
+      Log {
+        log_type : LogType::Standard,
+        log_category : LogCategory::Sequences,
+        time_stamp : SystemTime::now(),
+        source : String::from("debug_tests_d"),
+        header : String::from("This is log 4"),
+        contents : String::from("Also the fuel tank exploded")
+      },
+      Log {
+        log_type : LogType::Error,
+        log_category : LogCategory::Valves,
+        time_stamp : SystemTime::now(),
+        source : String::from("debug_tests_e"),
+        header : String::from("This is log 5"),
+        contents : String::from("Also the oxygen tank exploded")
+      }
+    ]
+  }
+
+  #[test]
+  fn logging_controller_basic() {
+    let mut controller = LogsController::new(
+      PathBuf::from("tests.txt"),
+      String::from("debug_tests")
+    );
+
+    let logs : [Log; 5] = generate_five_sample_logs();
+    for log in logs.iter().cloned() {
+      controller.log(log);
+    }
+
+
+    // Ensure normal iteration is as expected
+    {
+      let mut expected = Vec::from(logs.clone());
+      expected.reverse(); // reversed as logs are read newest to oldest
+
+      let output : Vec<Log> = controller.iter().cloned().collect();
+      assert_eq!(output, expected);
+    }
+
+    
+    // Ensure reverse iteration is as expected
+    {
+      // check reverse iterator of most recent 3 logs
+      let expected = Vec::from(logs.clone()).split_off(2); 
+      let output : Vec<Log> = controller.rev_iter(Some(2)).cloned().collect();
+      assert_eq!(output, expected);
+    }
   }
 }

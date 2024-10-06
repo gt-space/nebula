@@ -393,7 +393,7 @@ impl fmt::Display for LogCategory {
 
 
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 /// The structure for all logs received and stored within servo
 /// 
 /// It utilizes a variety of categorization techniques to enable filtering

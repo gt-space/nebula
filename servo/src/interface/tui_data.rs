@@ -11,7 +11,7 @@ use common::comm::{Measurement, Sequence};
 use std::string::String;
 use tui_input::Input;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NamedValue<T: Clone> {
   pub name: String,
   pub value: T,
@@ -26,6 +26,13 @@ impl<T: Clone> NamedValue<T> {
   }
 }
 
+impl<T: Clone + PartialEq> PartialEq for NamedValue<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.name == other.name && self.value == other.value
+  }
+}
+
+#[derive(Clone, Debug)]
 /// A fast and stable ordered vector of objects with a corresponding string key
 /// stored in a hashmap
 ///
@@ -99,6 +106,7 @@ impl<T: Clone> StringLookupVector<T> {
     self.lookup.insert(name.clone(), self.vector.len());
     self.vector.push(NamedValue::new(name.clone(), value));
   }
+
   pub fn remove(&mut self, key: &String) {
     if self.contains_key(key) {
       self.vector.remove(self.lookup[key]);
@@ -106,15 +114,12 @@ impl<T: Clone> StringLookupVector<T> {
     }
   }
 
-  /// Sorts the backing vector by name, meaning iterating through this structure
-  /// will go through alphabetical
+  /// Sorts the backing vector by name, making iterations through this 
+  /// structure be in alphabetical order
   pub fn sort_by_name(&mut self) {
     self.vector.sort_unstable_by_key(|x| x.name.to_string());
     for i in 0..self.vector.len() {
-      *self.lookup.get_mut(&self.vector[i].name).unwrap() = i; // Key has to
-                                                               // exist by the
-                                                               // nature of this
-                                                               // structure
+      *self.lookup.get_mut(&self.vector[i].name).expect("Key has to exist") = i; 
     }
   }
 
@@ -127,11 +132,13 @@ impl<T: Clone> StringLookupVector<T> {
       None => None,
     }
   }
+
   /// Gets a mutable reference to the item with the given index in the vector.
   /// Panics if the key is not valid
   pub fn get_from_index(&mut self, index: usize) -> Option<&NamedValue<T>> {
     self.vector.get(index)
   }
+
   /// Gets a mutable reference to the item with the given key.
   /// Panics if the key is not valid
   pub fn get_mut(&mut self, key: &String) -> Option<&mut NamedValue<T>> {
@@ -141,6 +148,7 @@ impl<T: Clone> StringLookupVector<T> {
       None => None,
     }
   }
+  
   /// Gets a mutable reference to the item with the given index in the vector.
   /// Panics if the key is not valid
   pub fn get_mut_from_index(
@@ -294,5 +302,111 @@ impl TuiData {
       debug_durations: Vec::<NamedValue<Duration>>::new(),
       last_debug_durations: Vec::<NamedValue<Duration>>::new(),
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn generate_standard_output() -> Vec<NamedValue<u32>> {
+    let out : [NamedValue<u32>; 20] = core::array::from_fn(|i| {
+      let value = i as u32;
+
+      let name : String = String::from(
+        char::from_u32(('a' as u32) + value)
+          .expect("it shouldn't be possible to go out of the range when we only
+            can go up 6 steps in ASCII")
+      ).repeat(i + 1);
+
+      NamedValue::<u32>::new(name, value)
+    });
+    Vec::<NamedValue<u32>>::from(out)
+  }
+
+  #[test]
+  fn slv_insertion() {
+    let mut expected : Vec<NamedValue<u32>> = Vec::new();
+    let mut output : Vec::<NamedValue<u32>>;
+    let mut slv : StringLookupVector<u32> = StringLookupVector::new();
+    
+    output = slv.iter().cloned().collect();
+    assert_eq!(output, expected);
+
+    // insert and validate
+    for i in 0..6 {
+      let value = i as u32;
+
+      let name : String = String::from(
+        char::from_u32(('z' as u32) - value)
+          .expect("it shouldn't be possible to go out of the range when we only
+          can go down 6 steps in ASCII")
+      ).repeat(i + 1);
+
+      // It shouldn't have the key before
+      assert!(!slv.contains_key(&name));
+
+      slv.add(&name, value);
+      expected.push(NamedValue::<u32>::new(name.clone(), value));   
+      
+      // It should have the key after
+      assert!(slv.contains_key(&name));
+
+      output = slv.iter().cloned().collect();
+      assert_eq!(output, expected);
+    }
+
+    let output : Vec::<NamedValue<u32>> = slv.iter().cloned().collect();
+
+    assert_eq!(output, expected);
+  }
+
+  
+  #[test]
+  fn slv_removal() {
+    let base : Vec<NamedValue<u32>> = generate_standard_output();
+    let mut output : Vec::<NamedValue<u32>>;
+    let mut slv_base : StringLookupVector<u32> = StringLookupVector::new();
+
+    for item in base.clone() {
+      slv_base.add(&item.name, item.value);
+    }
+
+    // attempt removing every item
+    for (index, item) in base.clone().iter().enumerate() {
+      let mut expected = base.clone();
+      let mut slv = slv_base.clone();
+      
+      // It should have the key before removal
+      assert!(slv.contains_key(&item.name));
+
+      expected.remove(index);
+      slv.remove(&item.name);
+
+      // It shouldn't have the key after
+      assert!(!slv.contains_key(&item.name));
+      
+      // Outputs should be the same as if it wasn't added
+      output = slv.iter().cloned().collect();
+      assert_eq!(output, expected);
+    }
+  }
+
+  #[test]
+  fn slv_sort() {
+    let expected : Vec::<NamedValue<u32>> = generate_standard_output();
+
+    let mut slv : StringLookupVector<u32> = StringLookupVector::new();
+
+    // insert everything reversed
+    for item in expected.clone().into_iter().rev() {
+      slv.add(&item.name, item.value);
+    }
+
+    slv.sort_by_name();
+
+    let output : Vec::<NamedValue<u32>> = slv.iter().cloned().collect();
+
+    assert_eq!(output, expected);
   }
 }
