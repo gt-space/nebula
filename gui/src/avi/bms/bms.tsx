@@ -24,7 +24,24 @@ function BMS() {
       <GeneralTitleBar name="BMS"/>
     </div>
     <div class="bms-view">
-      
+      <div class="bms-section-en" id="enable">
+          <div class="section-title"> ENABLE </div>
+          <button class="bms-button-en"> BMS </button>
+          <button class="bms-button-en"> Battery </button>
+          <button class="bms-button-en"> EStop R </button>
+          <button class="bms-button-en"> Balance </button>
+      </div>
+      <div class="bms-section-en" id="disable">
+          <div class="section-title"> DISABLE </div>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> BMS </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> Battery </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> EStop R </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> Balance </button>
+      </div>
+      <div class="bms-section" id="data">
+          <div class="section-title"> DATA DISPLAY </div>
+            {/* DATA content here */}
+      </div>
     </div>
     <div>
       <Footer/>

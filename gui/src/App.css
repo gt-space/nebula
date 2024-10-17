@@ -1108,3 +1108,51 @@ Sensors
   font-size: 12pt;
   margin-top: 15px;
 }
+
+/* BMS page */
+
+.bms-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.bms-section-en {
+  flex: 1;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.bms-section {
+  flex: 4;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.bms-button-en {
+  justify-content: center; 
+  border-style:solid; 
+  border-color: #212121; 
+  border-width: 3px; 
+  background-color: #22873D; 
+  height: 30px;
+  width: 150px;
+  color: white; 
+  margin-top: 10px;
+  font-family: 'Rubik';
+  align-items: center;
+  font-size: small;
+  cursor: pointer;
+}
+
+.bms-button-en:hover {
+  filter: brightness(60%);
+}
+
+.bms-button-en:active {
+  border-color: lightgray; 
+}
+
