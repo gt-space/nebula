@@ -1087,3 +1087,24 @@ Sensors
   border-color: white;
   border-style: solid;
 }
+
+/* SAM page */
+
+.sam-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.sam-section {
+  flex: 1;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.section-title {
+  font-size: 12pt;
+  margin-top: 15px;
+}
