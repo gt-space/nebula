@@ -1156,3 +1156,39 @@ Sensors
   border-color: lightgray; 
 }
 
+
+/* AHRS Page */
+.ahrs-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+  /* background-color: #333333; */
+}
+
+.camera-data-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #333333;
+  border-color: #212121;
+  width: 20%;
+  /* border-radius: 5px; */
+}
+
+.imu-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #333333;
+  border-color: #212121;
+  /* border-radius: 5px; */
+}
+
+.button {
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+}
+
