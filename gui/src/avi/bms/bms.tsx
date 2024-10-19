@@ -41,6 +41,88 @@ function BMS() {
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
             {/* DATA content here */}
+            <div class="adc-data-section">
+              <div class="section-title" style={{"text-decoration": 'underline'}}> ADC Data </div>
+              <div class="column-title-row">
+                <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
+                <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+              </div>
+              {/* Change to iteratively display ADC data variables and values once backend array is implemented */}
+              <div class="adc-data-row-container">
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Variable 1 </div>
+                  <div class="adc-data-value"> Value 1 </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Variable 2 </div>
+                  <div class="adc-data-value"> Value 2 </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Variable 3 </div>
+                  <div class="adc-data-value"> Value 3 </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Variable 4 </div>
+                  <div class="adc-data-value"> Value 4 </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Variable 5 </div>
+                  <div class="adc-data-value"> Value 5 </div>
+                </div>
+              </div>
+            </div>
+            <div class="state-section">
+              <div class="section-title" style={{"text-decoration": 'underline'}}> States </div>
+              <div class="column-title-row">
+                <div class="column-title" style={{"font-size": "16px"}}> Smth? </div>
+                <div class="column-title" style={{"font-size": "16px"}}> States </div>
+              </div>
+              {/* Change to iteratively display state variables and values once backend array is implemented */}
+              <div class="state-row-container">
+                <div class="state-row">
+                  <div class="state-variable"> State 1 </div>
+                  <div class="state-value"> Value 1 </div>
+                </div>
+                <div class="state-row">
+                  <div class="state-variable"> State 2 </div>
+                  <div class="state-value"> Value 2 </div>
+                </div>
+                <div class="state-row">
+                  <div class="state-variable"> State 3 </div>
+                  <div class="state-value"> Value 3 </div>
+                </div>
+                <div class="state-row">
+                  <div class="state-variable"> State 4 </div>
+                  <div class="state-value"> Value 4 </div>
+                </div>
+              </div>
+            </div>
+            <div class="cell-voltages-section">
+              <div class="section-title" style={{"text-decoration": 'underline'}}> Cell Voltages </div>
+              <div class="column-title-row">
+                <div class="column-title" style={{"font-size": "16px"}}> Cell </div>
+                <div class="column-title" style={{"font-size": "16px"}}> Voltage </div>
+              </div>
+              {/* Change to iteratively display cell voltage variables and values once backend array is implemented */}
+              <div class="cell-voltages-row-container">
+                <div class="cell-voltage-row">
+                  <div class="cell-voltage-variable"> State 1 </div>
+                  <div class="cell-voltage-value"> Value 1 </div>
+                </div>
+                <div class="cell-voltage-row">
+                  <div class="cell-voltage-variable"> State 2 </div>
+                  <div class="cell-voltage-value"> Value 2 </div>
+                </div>
+                <div class="cell-voltage-row">
+                  <div class="cell-voltage-variable"> State 3 </div>
+                  <div class="cell-voltage-value"> Value 3 </div>
+                </div>
+                <div class="cell-voltage-row">
+                  <div class="cell-voltage-variable"> State 4 </div>
+                  <div class="cell-voltage-value"> Value 4 </div>
+                </div>
+              </div>
+            </div>
       </div>
     </div>
     <div>
