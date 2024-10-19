@@ -70,6 +70,17 @@ async function createSequencesWindow() {
   })
 }
 
+async function createPIDWindow() {
+  const webview = new WebviewWindow('P&ID', {
+    url: 'pid.html',
+    fullscreen: false,
+    title: 'PID',
+    decorations: false,
+    height: 600,
+    width: 400,
+  })
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -131,6 +142,9 @@ const MenuBar: Component = (props) => {
           </div>
           <div class="dropdown-item">
             Logs
+          </div>
+          <div class="dropdown-item" onClick={() => createPIDWindow()}>
+            P&ID
           </div>
         </div>
       </div>
