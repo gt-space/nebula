@@ -330,7 +330,7 @@ impl ADC {
 
     match self.measurement {
       Measurement::CurrentLoopPt => {
-        reading = (value as f64) * (2.5 / ((1 << 15) as f64));
+        reading = (value as f64) * (2.5 / ((1 << 14) as f64));
         //println!("valve {:?} I: {:?}", (iteration % 6) + 1, reading);
       }
 
