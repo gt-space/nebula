@@ -71,13 +71,13 @@ async function createSequencesWindow() {
 }
 
 async function createPIDWindow() {
-  const webview = new WebviewWindow('P&ID', {
+  const webview = new WebviewWindow('PID', {
     url: 'pid.html',
     fullscreen: false,
     title: 'PID',
     decorations: false,
-    height: 600,
-    width: 400,
+    height: 1000,
+    width: 1000,
   })
 }
 

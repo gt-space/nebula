@@ -10,6 +10,8 @@
     "jsxImportSource": "solid-js",
     "types": ["vite/client", "@playwright/test"],
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "allowJs": true,
+    "checkJs": true
   }
 }
