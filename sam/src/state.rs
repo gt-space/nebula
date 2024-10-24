@@ -444,7 +444,10 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
 }
 
 // pinout is for flight version
+
+
 pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
+  // read Linux system file associated with current onboard ADC channel
   let data = match fs::read_to_string(RAIL_PATHS[channel as usize]) {
     Ok(output) => output,
     Err(_e) => {
@@ -457,6 +460,7 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
     }
   };
 
+  // have to handle this possibility after obtaining the String
   if data.is_empty() {
     eprintln!("Empty data for on board ADC channel {}", channel);
     if channel == 0 || channel == 1 || channel == 3 {
@@ -466,12 +470,20 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
     }
   }
 
+  // convert to f64 to inverse the voltage divider or current sense amplifications
   match data.trim().parse::<f64>() {
     Ok(data) => {
       let voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
       if channel == 0 || channel == 1 || channel == 3 {
+        // inverse voltage divider
         ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
       } else {
+        // current rail, will change measurement type when GUI can handle it
+        /*
+        The inverse of the mathematical operations performed by the shunt
+        resistor and current sense amplifier actually result in the ADC input
+        voltage being equal to the rail current. Thus V = I :)
+         */
         (voltage, adc::Measurement::VPower)
       }
     },
