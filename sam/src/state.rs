@@ -478,12 +478,13 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
         // inverse voltage divider
         ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
       } else {
-        // current rail, will change measurement type when GUI can handle it
         /*
         The inverse of the mathematical operations performed by the shunt
         resistor and current sense amplifier actually result in the ADC input
         voltage being equal to the rail current. Thus V = I :)
          */
+
+        // current rail, will change measurement type when GUI can handle it
         (voltage, adc::Measurement::VPower)
       }
     },
