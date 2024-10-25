@@ -66,7 +66,7 @@ async function createAHRSWindow() {
     title: 'AHRS',
     decorations: false,
     height: 700,
-    width: 1400,
+    width: 1000,
   })
 }
 
