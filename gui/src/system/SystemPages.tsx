@@ -706,7 +706,7 @@ const Sequences: Component = (props) => {
         </div>
       </div>
       <div class="sequences-editor">
-        <div style={{display: "grid", "grid-template-columns": "240px 200px 10px 50px 1fr", height: '50px'}}>
+        <div style={{display: "grid", "grid-template-columns": "240px 200px 10px 300px 1fr 1fr", height: '50px'}}>
           <input class="connect-textfield"
             type="text"
             name="sequence-name"
@@ -724,6 +724,7 @@ const Sequences: Component = (props) => {
           </div>
           <div></div>
           <div><button class="add-config-btn" onClick={resetSequenceEditor}>New</button></div>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="delete-sequence-button">Delete</button></div>
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>

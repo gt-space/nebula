@@ -876,11 +876,20 @@ Sensors
   margin: 5px;
   font-family: 'Rubik';
 }
+.delete-sequence-button {
+  height: 30px;
+  background-color: #C53434;
+  border-radius: 5px;
+  border: 2px solid #212121;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
 .submit-sequence-button {
   height: 30px;
   background-color: #015878;
   border-radius: 5px;
-  border: none;
+  border: 2px solid #212121;
   justify-self: center;
   font-family: 'Rubik';
   color: #f0f0f0;
