@@ -257,6 +257,23 @@ export async function sendSequence(ip: string, name: string, sequence: string, c
   }
 }
 
+// function to delete sequences from the server
+export async function deleteSequence(ip: string, name: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'DELETE',
+      body: JSON.stringify({
+        'name': name
+      }),
+    });
+    console.log('deleted sequence from server');
+    return response;
+  } catch(e) {
+    return e;
+  }
+}
+
 // function to receive sequences from the sever
 export async function getSequences(ip: string) {
   try {
