@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteSequence, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -31,6 +31,7 @@ const [triggers, setTriggers] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
+const [confirmDelete, setConfirmDelete] = createSignal(false);
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const default_entry = {
   text_id: '',
@@ -686,6 +687,30 @@ async function sendSequenceIntermediate() {
   setSaveSequenceDisplay("Submit");
 }
 
+async function removeSequence(name: string) {
+  const success = await deleteSequence(serverIp() as string, name) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
+    refreshSequences();
+    setSaveSequenceDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveSequenceDisplay("Submit");
+    return;
+  }
+  setSaveSequenceDisplay("Deleted!");
+  refreshSequences();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveSequenceDisplay("Submit");
+}
+
+const handleClickOutside = (e: MouseEvent) => {
+  const target = e.target as HTMLElement | null;
+  if (target && !target.closest('.delete-sequence-button')) {
+    setConfirmDelete(false);
+    document.removeEventListener('click', handleClickOutside);
+  }
+}
+
 const Sequences: Component = (props) => {
   return <div class="system-sequences-page">
     <div style="text-align: center; font-size: 14px">SEQUENCES</div>
@@ -724,7 +749,18 @@ const Sequences: Component = (props) => {
           </div>
           <div></div>
           <div><button class="add-config-btn" onClick={resetSequenceEditor}>New</button></div>
-          <div style={{width: '100%'}}><button style={{float: "right"}} class="delete-sequence-button">Delete</button></div>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="delete-sequence-button" onClick={async (e) => {
+            e.stopPropagation();
+            if (confirmDelete()) {
+              // console.log(currentSequnceName());
+              await removeSequence(currentSequnceName());
+              setConfirmDelete(false);
+              document.removeEventListener('click', handleClickOutside);
+            } else {
+              setConfirmDelete(true);
+              document.addEventListener('click', handleClickOutside);
+            }
+          }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button></div>
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
