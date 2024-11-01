@@ -263,7 +263,9 @@ export async function deleteSequence(ip: string, name: string) {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
       headers: new Headers({ 'Content-Type': 'application/json'}),
       method: 'DELETE',
-      body: JSON.stringify({ 'name': name })
+      body: JSON.stringify({ 
+        'name': name,
+      }),
     });
     console.log('deleted sequence from server');
     return response;

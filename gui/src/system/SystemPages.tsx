@@ -699,6 +699,7 @@ async function removeSequence(name: string) {
   }
   setSaveSequenceDisplay("Deleted!");
   refreshSequences();
+  resetSequenceEditor();
   await new Promise(r => setTimeout(r, 1000));
   setSaveSequenceDisplay("Submit");
 }
@@ -752,7 +753,6 @@ const Sequences: Component = (props) => {
           <div style={{width: '100%'}}><button style={{float: "right"}} class="delete-sequence-button" onClick={async (e) => {
             e.stopPropagation();
             if (confirmDelete()) {
-              // console.log(currentSequnceName());
               await removeSequence(currentSequnceName());
               setConfirmDelete(false);
               document.removeEventListener('click', handleClickOutside);
