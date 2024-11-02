@@ -397,6 +397,18 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
+        <label for="sort-options">Sort by:</label>
+        <select class="sort-dropdown" id="sort-options" name="sort-options">
+          <option value="name">Name</option>
+          <option value="board_id">Board ID</option>
+          <option value="sensor_type">Sensor Type</option>
+          <option value="channel">Channel</option>
+          <option value="computer">Computer</option>
+          <option value="min">Min</option>
+          <option value="max">Max</option>
+          <option value="powered_threshold">Valve Power Threshold</option>
+          <option value="normally_closed">Valve Normally Closed</option>
+        </select>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
