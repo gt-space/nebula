@@ -16,7 +16,16 @@ pub enum State {
   Abort
 }
 
-// pub struct ExecuteCommandReadSensorsData {
+// pub struct InitData<'a> {
+//   gpio_controllers: &'a [Gpio],
+// }
+
+// pub struct EstablishFlightComputerConnectionData {
+//   gpio_controllers: &'a [Gpio],
+//   adcs: &'a [Gpio],
+// }
+
+// pub struct ExecuteCommandReadSensorsData<'a> {
 //   gpio_controllers: &'a [Gpio],
 //   adcs: Vec<ADC<'a>>,
 //   my_data_socket: UdpSocket,
