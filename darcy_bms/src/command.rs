@@ -1,6 +1,15 @@
 use std::collections::HashMap;
-
 use common::comm::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}, ADCKind, SamControlMessage};
+use once_cell::unsync::OnceCell;
+
+// Define the static OnceCell for lazy initialization
+pub static GPIO_CONTROLLERS: OnceCell<Vec<Gpio>> = OnceCell::new();
+
+// Function to initialize and access GPIO_CONTROLLERS
+pub fn get_gpio_controllers() -> &'static Vec<Gpio> {
+    GPIO_CONTROLLERS.get_or_init(|| open_controllers())
+}
+
 
 // controller = floor(GPIO#/32)
 // pin = remainder

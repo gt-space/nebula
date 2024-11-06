@@ -9,23 +9,23 @@ use crate::command::{init_gpio, open_controllers};
 use jeflog::{warn, fail, pass};
 
 pub enum State<'a> {
-  Init(InitData),
+  Init(InitData<'a>),
   EstablishFlightComputerConnection(EstablishFlightComputerConnectionData<'a>),
   Loop(LoopData<'a>),
   Abort(AbortData<'a>)
 }
 
-pub struct InitData {
-  pub gpio_controllers: Vec<Gpio>
+pub struct InitData<'a> {
+  pub gpio_controllers: &'a[Gpio]
 }
 
 pub struct EstablishFlightComputerConnectionData<'a> {
-  gpio_controllers: Vec<Gpio>,
+  gpio_controllers: &'a[Gpio],
   adcs: Vec<ADC<'a>>,
 }
 
 pub struct LoopData<'a> {
-  gpio_controllers: Vec<Gpio>,
+  gpio_controllers: &'a[Gpio],
   adcs: Vec<ADC<'a>>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
@@ -34,16 +34,16 @@ pub struct LoopData<'a> {
 }
 
 pub struct AbortData<'a> {
-  gpio_controllers: Vec<Gpio>,
+  gpio_controllers: &'a[Gpio],
   adcs: Vec<ADC<'a>>
 }
 
 impl<'a> State<'a> {
 
-  pub fn next(&mut self) -> Self {
+  pub fn next(mut self) -> Self {
     match self {
       State::Init(data) => {
-        init_gpio(&data.gpio_controllers);
+        init_gpio(data.gpio_controllers);
 
         // VBatUmbCharge
         let mut battery_adc: ADC = ADC::new(
@@ -85,7 +85,7 @@ impl<'a> State<'a> {
         )
       },
 
-      State::Loop(data) => {
+      State::Loop(mut data) => {
         check_and_execute(&data.gpio_controllers, &data.my_command_socket);
         data.then = Instant::now();
         let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
@@ -102,7 +102,17 @@ impl<'a> State<'a> {
 
         let datapoints: Vec<DataPoint> = poll_adcs(&mut data.adcs);
         send_data(&data.my_data_socket, &data.fc_address, datapoints);
-        State::Loop(data)
+
+        State::Loop(
+          LoopData {
+            gpio_controllers: data.gpio_controllers,
+            adcs: data.adcs,
+            my_command_socket: data.my_command_socket,
+            my_data_socket: data.my_data_socket,
+            fc_address: data.fc_address,
+            then: data.then
+          }
+        )
       }
 
       State::Abort(data) => {

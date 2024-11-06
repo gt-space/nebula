@@ -30,7 +30,7 @@ pub struct Gpio {
   base: *mut c_void,
   direction: Mutex<*mut u32>,
   dataout: Mutex<*mut u32>,
-  datain: *const u32,
+  datain: Mutex<*const u32>,
 }
 
 pub struct Pin<'a> {
@@ -107,9 +107,9 @@ impl Gpio {
       base.offset(GPIO_DATAOUT_REGISTER) as *mut u32
     });
 
-    let datain = unsafe {
+    let datain = Mutex::new(unsafe {
       base.offset(GPIO_DATAIN_REGISTER) as *const u32
-    };
+    });
 
     Gpio {
       fd,
@@ -166,7 +166,8 @@ impl<'a> Pin<'a> {
   }
 
   pub fn digital_read(&self) -> PinValue {
-    let datain_bits = unsafe { read_volatile(self.gpio.datain) };
+    let datain = *self.gpio.datain.lock().unwrap();
+    let datain_bits = unsafe { read_volatile(datain) };
 
     if datain_bits & (1 << self.index) != 0 {
       PinValue::High
