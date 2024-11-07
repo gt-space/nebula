@@ -1,6 +1,6 @@
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
-  ffi::CString, ptr::{read_volatile, write_volatile}, sync::{Arc, Mutex}
+  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
 };
 
 const GPIO_BASE_REGISTERS: [off_t; 4] =
@@ -35,7 +35,7 @@ unsafe impl Sync for Gpio {}
 unsafe impl Send for Gpio {}
 
 pub struct Pin {
-  gpio: Arc<Gpio>,
+  gpio: &'static Gpio,
   index: usize,
 }
 
@@ -50,7 +50,7 @@ impl Drop for Gpio {
 }
 
 impl Gpio {
-  pub fn open_controller(controller_index: usize) -> Arc<Gpio> {
+  pub fn open_controller(controller_index: usize) -> Gpio {
     let path = CString::new("/dev/mem").unwrap();
     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
 
@@ -104,18 +104,18 @@ impl Gpio {
       base.offset(GPIO_DATAIN_REGISTER) as *const u32
     });
 
-    Arc::new(Gpio {
+    Gpio {
       fd,
       base: Mutex::new(base),
       direction,
       dataout,
       datain,
-    })
+    }
   }
 
-  pub fn get_pin(self: &Arc<Self>, index: usize) -> Pin {
+  pub fn get_pin(&'static self, index: usize) -> Pin {
     Pin {
-      gpio: self.clone(),
+      gpio: self,
       index,
     }
   }

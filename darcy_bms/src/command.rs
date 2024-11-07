@@ -3,7 +3,7 @@ use std::sync::Arc;
 use common::comm::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}, ADCKind, SamControlMessage};
 use once_cell::sync::Lazy;
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Arc<Gpio>>> = Lazy::new(|| open_controllers());
+pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 // use once_cell::sync::OnceCell;
 
 // pub fn get_gpio_controllers() -> &'static Vec<Gpio> {
@@ -89,7 +89,7 @@ pub fn init_gpio() {
   }
 }
 
-fn open_controllers() -> Vec<Arc<Gpio>> {
+fn open_controllers() -> Vec<Gpio> {
   (0..=3).map(Gpio::open_controller).collect()
 }
 
