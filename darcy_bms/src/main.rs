@@ -9,8 +9,6 @@ use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exi
 use command::execute;
 use common::comm::{ChannelType, DataMessage, DataPoint, Gpio, PinValue::{Low, High}, SamControlMessage, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
-use state::InitData;
-use crate::command::get_gpio_controllers;
 use ads114s06::ADC;
 use adc::{init_adcs, poll_adcs};
 
@@ -20,9 +18,7 @@ const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 fn main() {
-  let mut state = state::State::Init(
-    InitData {gpio_controllers: &get_gpio_controllers()}
-  );
+  let mut state = state::State::Init;
   
   loop {
     state = state.next();

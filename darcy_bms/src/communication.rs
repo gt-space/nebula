@@ -160,7 +160,7 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
   }
 }
 
-pub fn check_and_execute(gpio_controllers: &[Gpio], command_socket: &UdpSocket) {
+pub fn check_and_execute(command_socket: &UdpSocket) {
   // where to store the command recieved from the FC
   let mut buf: [u8; 10240] = [0; 10240];
 
@@ -182,5 +182,5 @@ pub fn check_and_execute(gpio_controllers: &[Gpio], command_socket: &UdpSocket) 
   pass!("Executing command...");
   
   // execute the command
-  execute(gpio_controllers, command);
+  execute(command);
 }
