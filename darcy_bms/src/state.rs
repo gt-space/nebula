@@ -32,7 +32,7 @@ pub struct AbortData {
 }
 
 impl State {
-  
+
   pub fn next(mut self) -> Self {
     match self {
       State::Init => {
@@ -43,7 +43,7 @@ impl State {
         connect(data)
       },
 
-      State::MainLoop(mut data) => {
+      State::MainLoop(data) => {
         main_loop(data)
       }
 
@@ -85,8 +85,8 @@ fn init() -> State {
 fn connect(data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
 
-  State::Loop(
-    LoopData {
+  State::MainLoop(
+    MainLoopData {
       adcs: data.adcs,
       my_command_socket: command_socket,
       my_data_socket: data_socket,
@@ -98,7 +98,6 @@ fn connect(data: ConnectData) -> State {
 
 fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket);
-  data.then = Instant::now();
   let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
   data.then = updated_time;
 
@@ -113,15 +112,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   let datapoints: Vec<DataPoint> = poll_adcs(&mut data.adcs);
   send_data(&data.my_data_socket, &data.fc_address, datapoints);
 
-  State::MainLoop(
-    MainLoopData {
-      adcs: data.adcs,
-      my_command_socket: data.my_command_socket,
-      my_data_socket: data.my_data_socket,
-      fc_address: data.fc_address,
-      then: data.then
-    }
-  )
+  State::MainLoop(data)
 }
 
 fn abort(data: AbortData) -> State {
