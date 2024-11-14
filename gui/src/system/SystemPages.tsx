@@ -397,18 +397,6 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
-        <label for="sort-options">Sort by:</label>
-        <select class="sort-dropdown" id="sort-options" name="sort-options">
-          <option value="name">Name</option>
-          <option value="board_id">Board ID</option>
-          <option value="sensor_type">Sensor Type</option>
-          <option value="channel">Channel</option>
-          <option value="computer">Computer</option>
-          <option value="min">Min</option>
-          <option value="max">Max</option>
-          <option value="powered_threshold">Valve Power Threshold</option>
-          <option value="normally_closed">Valve Normally Closed</option>
-        </select>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
@@ -549,8 +537,19 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
-      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
-      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
+        <label for="sort-options">Sort by:</label>
+          <select class="sort-dropdown" id="sort-options" name="sort-options" value="" onChange={(e) => {
+            const target = e.target as HTMLSelectElement;
+            const selectedOption = target.value;
+            sortConfigurations(index, selectedOption);
+          }}>
+            <option value="" hidden></option>
+            <option value="name">Name</option>
+            <option value="boardId">Board ID</option>
+            <option value="channelType">Channel Type</option>
+          </select>
+        <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
+        <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
       </div>
     </div>
     <div class="horizontal-line"></div>
@@ -582,6 +581,27 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
       </For>
     </div>
   </div>
+}
+
+const sortConfigurations = (index: number, sortOption: string) => {
+  const sortedMappings = [...(configurations() as Config[])[index].mappings];
+  console.log(...(configurations() as Config[])[index].mappings);
+  sortedMappings.sort((a, b) => {
+    switch (sortOption) {
+      case 'name':
+        return a.text_id.localeCompare(b.text_id);
+      case 'boardId':
+        return a.board_id.localeCompare(b.board_id);
+      case 'channelType':
+        return a.sensor_type.localeCompare(b.sensor_type);
+      default:
+        return 0;
+    }
+  });
+  const updatedConfigs = [...configurations() as Config[]];
+  updatedConfigs[index].mappings = sortedMappings;
+  console.log(sortedMappings);
+  setConfigurations(updatedConfigs);
 }
 
 const ConfigView: Component = (props) => {
