@@ -547,6 +547,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
             <option value="name">Name</option>
             <option value="boardId">Board ID</option>
             <option value="channelType">Channel Type</option>
+            <option value="channel">Channel</option>
           </select>
         <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
         <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
@@ -594,6 +595,8 @@ const sortConfigurations = (index: number, sortOption: string) => {
         return a.board_id.localeCompare(b.board_id);
       case 'channelType':
         return a.sensor_type.localeCompare(b.sensor_type);
+      case 'channel':
+        return a.channel - b.channel;
       default:
         return 0;
     }
