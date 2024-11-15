@@ -121,7 +121,7 @@ pub async fn delete_sequence(
     .connection
     .lock()
     .await
-    .execute("DELETE FROM Sequences WHERE text_id = ?1", [&request.name])
+    .execute("DELETE FROM Sequences WHERE name = ?1", [&request.name])
     .map_err(bad_request)?;
 
   Ok(())
