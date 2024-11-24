@@ -25,7 +25,10 @@ pub enum Measurement {
   Tc1,
   Tc2,
   DiffSensors,
-  Rtd,
+  // Changed Rtd to Rtd1, Rtd2, and Rtd3 in same fashion as TC's for rev4 ground
+  Rtd1,
+  Rtd2,
+  Rtd3
 }
 
 pub enum ADCEnum {
@@ -59,6 +62,7 @@ impl ADC {
     }
   }
 
+  // not called anywhere
   pub fn cs_mappings() -> HashMap<Measurement, usize> {
     let mut cs_gpios: HashMap<Measurement, usize> = HashMap::new();
     cs_gpios.insert(Measurement::CurrentLoopPt, 30);
@@ -416,19 +420,23 @@ pub fn gpio_controller_mappings( // --> whats on the board
   // let rtd_pin = controllers[2].get_pin(11);
   // rtd_pin.mode(Output);
 
-    let rtd1_pin = controllers[1].get_pin(28);
+    // modified pinout for rev4 ground and added cs diff_pin cuz i fucked up
+    let diff_pin = controllers[0].get_pin(30);
+    ds_pin.mode(Output);
+
+    let rtd1_pin = controllers[1].get_pin(13);
     rtd1_pin.mode(Output);
 
-    let rtd2_pin = controllers[2].get_pin(2);
+    let rtd2_pin = controllers[2].get_pin(5);
     rtd2_pin.mode(Output);
 
-    let rtd3_pin = controllers[2].get_pin(6);
+    let rtd3_pin = controllers[2].get_pin(2);
     rtd3_pin.mode(Output);
 
-    let i_valve_pin = controllers[2].get_pin(9);
+    let i_valve_pin = controllers[0].get_pin(31);
     i_valve_pin.mode(Output);
 
-    let v_valve_pin = controllers[2].get_pin(11);
+    let v_valve_pin = controllers[1].get_pin(16);
     v_valve_pin.mode(Output);
 
   HashMap::from([
@@ -439,10 +447,10 @@ pub fn gpio_controller_mappings( // --> whats on the board
     //(Measurement::IPower, i_power_pin),
     //(Measurement::Tc1, tc_1_pin),
     //(Measurement::Tc2, tc_2_pin),
-    //(Measurement::DiffSensors, diff_pin), // dedicated CS pin ?
-    (Measurement::Rtd, rtd1_pin),
-    (Measurement::Rtd, rtd2_pin),
-    (Measurement::Rtd, rtd3_pin),
+    (Measurement::DiffSensors, diff_pin),
+    (Measurement::Rtd1, rtd1_pin),
+    (Measurement::Rtd2, rtd2_pin),
+    (Measurement::Rtd3, rtd3_pin),
   ])
 }
 
@@ -467,33 +475,34 @@ pub fn data_ready_mappings(
   // let diff_pin = controllers[3].get_pin(15);
   // diff_pin.mode(Input);
 
-  let cl_pin = controllers[0].get_pin(7);
+  // modified pinout for rev4 ground
+  let cl_pin = controllers[3].get_pin(17);
   cl_pin.mode(Input);
 
-  let diff_pin = controllers[2].get_pin(14);
+  let diff_pin = controllers[1].get_pin(28);
   diff_pin.mode(Input);
 
-  let rtd1_pin = controllers[1].get_pin(18);
+  let rtd1_pin = controllers[1].get_pin(12);
   rtd1_pin.mode(Input);
 
-  let rtd2_pin = controllers[2].get_pin(3);
+  let rtd2_pin = controllers[2].get_pin(4);
   rtd2_pin.mode(Input);
 
-  let rtd3_pin = controllers[2].get_pin(10);
+  let rtd3_pin = controllers[2].get_pin(3);
   rtd3_pin.mode(Input);
 
-  let i_valve_pin = controllers[0].get_pin(14);
+  let i_valve_pin = controllers[1].get_pin(18);
   i_valve_pin.mode(Input);
 
-  let v_valve_pin = controllers[2].get_pin(12);
+  let v_valve_pin = controllers[1].get_pin(19);
   v_valve_pin.mode(Input);
 
   HashMap::from([
     (Measurement::CurrentLoopPt, cl_pin),
     (Measurement::DiffSensors, diff_pin),
-    (Measurement::Rtd, rtd1_pin),
-    (Measurement::Rtd, rtd2_pin),
-    (Measurement::Rtd, rtd3_pin),
+    (Measurement::Rtd1, rtd1_pin),
+    (Measurement::Rtd2, rtd2_pin),
+    (Measurement::Rtd3, rtd3_pin),
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
     // (Measurement::VPower, v_power_pin),
@@ -516,11 +525,14 @@ pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) { // --> whats on the board
     // controllers[0].get_pin(13),
     // controllers[0].get_pin(23),
     // controllers[2].get_pin(23),
-    controllers[1].get_pin(28),
+
+    // modified pinout for chip selects for rev4 ground and added diff cs cuz i messed up
+    controllers[0].get_pin(30),
+    controllers[1].get_pin(13),
+    controllers[2].get_pin(5),
     controllers[2].get_pin(2),
-    controllers[2].get_pin(6),
-    controllers[2].get_pin(9),
-    controllers[2].get_pin(11),
+    controllers[0].get_pin(31),
+    controllers[1].get_pin(16),
   ];
 
   for pin in pins.iter() {
@@ -531,15 +543,16 @@ pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) { // --> whats on the board
 
 // check pin numbers
 pub fn init_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
-  let sel1 = controllers[0].get_pin(30);
+  // modified pinout for rev4 ground
+  let sel1 = controllers[0].get_pin(22);
   sel1.mode(Output);
   sel1.digital_write(Low);
 
-  let sel2 = controllers[2].get_pin(15);
+  let sel2 = controllers[0].get_pin(23);
   sel2.mode(Output);
   sel2.digital_write(Low);
 
-  let sel3 = controllers[3].get_pin(21);
+  let sel3 = controllers[3].get_pin(19);
   sel3.mode(Output);
   sel3.digital_write(Low);
 

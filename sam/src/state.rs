@@ -31,12 +31,13 @@ const FC_ADDR: &str = "server-01";
 
 const FC_HEARTBEAT_TIMEOUT: u128 = 500;
 
-const PATH_3V3: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
-const PATH_5V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
-const PATH_5I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
-const PATH_24V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
-const PATH_24I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
-const RAIL_PATHS: [&str; 5] = [PATH_3V3, PATH_5V, PATH_5I, PATH_24V, PATH_24I];
+// updated file path names for rev4 ground pinout
+const PATH_24V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
+const PATH_24I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
+const PATH_5V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
+const PATH_5I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
+const PATH_3V3: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
+const RAIL_PATHS: [&str; 5] = [PATH_24V, PATH_24I, PATH_5V, PATH_5I, PATH_3V3];
 
 pub struct Data {
   pub data_socket: UdpSocket,
@@ -83,9 +84,12 @@ impl State {
 
     match self {
       State::Init => {
+        /* Why is this shit needed, boot pin?
         let valve6 = data.gpio_controllers[0].get_pin(8);
         valve6.mode(Output);
         valve6.digital_write(Low);
+        */
+        
         /* Create a spidev wrapper to work with
         you call this wrapper to handle and all transfers */
         // let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
@@ -116,6 +120,11 @@ impl State {
             ref_controllers.clone(),
             ref_drdy.clone(),
         ));
+        /*
+        cl on rev4 ground, unlike rev4 flight uses a normal gpio pin for
+        chip select cuz I messed up, but providing same SPI file should not
+        affect that
+         */
         let cl = ADCEnum::ADC(ADC::new(
           adc::Measurement::CurrentLoopPt,
           Rc::new(create_spi("/dev/spidev1.1").unwrap()),
@@ -135,20 +144,21 @@ impl State {
           ref_controllers.clone(),
           ref_drdy.clone(),
         ));
+        // Fixed measurement values for RTDs
         let rtd1 = ADCEnum::ADC(ADC::new(
-          adc::Measurement::Rtd,
+          adc::Measurement::Rtd1,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         ));
         let rtd2 = ADCEnum::ADC(ADC::new(
-          adc::Measurement::Rtd,
+          adc::Measurement::Rtd2,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         ));
         let rtd3 = ADCEnum::ADC(ADC::new(
-          adc::Measurement::Rtd,
+          adc::Measurement::Rtd3,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
@@ -285,8 +295,10 @@ impl State {
         one value from each channel of each ADC, thus we clear it at the start
         to just have data from one iteration
          */
+
+        // Updated pin mapping from rev4 flight for rev4 ground
         data.data_points.clear();
-        let valve_sel_pins = [data.gpio_controllers[0].get_pin(30), data.gpio_controllers[2].get_pin(15), data.gpio_controllers[3].get_pin(21)];
+        let valve_sel_pins = [data.gpio_controllers[0].get_pin(22), data.gpio_controllers[0].get_pin(23), data.gpio_controllers[3].get_pin(19)];
         /*
         Going from 0 to 5 inclusive is the maximum number of channels or
         readings we can get from an ADC. If the current ADC has less, we simply
@@ -311,6 +323,7 @@ impl State {
                   adc::Measurement::IValve => {
                     let (v, t) = adc.get_adc_reading(i/2);
                     let current_sel_pin = &valve_sel_pins[(i as usize) / 2];
+                    current_sel_pin.mode(Output); // added this cuz idk why it was not here before
 
                     match current_sel_pin.digital_read() {
                       Low => current_sel_pin.digital_write(High),
@@ -395,13 +408,14 @@ fn abort(controllers: &[Arc<Gpio>]) {
   fail!("Aborting the SAM Board.");
   warn!("You must manually restart SAM software.");
 
+  // updated pinout for rev4 ground
   let pins = [
-    controllers[0].get_pin(8),  // valve 1
-    controllers[2].get_pin(16), // valve 2
-    controllers[2].get_pin(17), // valve 3
-    controllers[2].get_pin(25), // valve 4
-    controllers[2].get_pin(1),  // valve 5
-    controllers[1].get_pin(14), // valve 6
+    controllers[1].get_pin(0),  // valve 1
+    controllers[1].get_pin(4), // valve 2
+    controllers[1].get_pin(14), // valve 3
+    controllers[1].get_pin(15), // valve 4
+    controllers[0].get_pin(15),  // valve 5
+    controllers[0].get_pin(17), // valve 6
   ];
 
   for pin in pins.iter() {
@@ -452,7 +466,8 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
     Ok(output) => output,
     Err(_e) => {
       eprintln!("Fail to read {}", RAIL_PATHS[channel as usize]);
-      if channel == 0 || channel == 1 || channel == 3 {
+      // modified channel boolean expression for rev4 ground pinout
+      if channel == 0 || channel == 2 || channel == 4 {
         return (-1.0, adc::Measurement::VPower)
       } else {
         return (-1.0, adc::Measurement::IPower)
@@ -463,7 +478,8 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
   // have to handle this possibility after obtaining the String
   if data.is_empty() {
     eprintln!("Empty data for on board ADC channel {}", channel);
-    if channel == 0 || channel == 1 || channel == 3 {
+    // modified channel boolean expression for rev4 ground pinout
+    if channel == 0 || channel == 2 || channel == 4 {
       return (-1.0, adc::Measurement::VPower)
     } else {
       return (-1.0, adc::Measurement::IPower)
@@ -474,7 +490,8 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
   match data.trim().parse::<f64>() {
     Ok(data) => {
       let voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
-      if channel == 0 || channel == 1 || channel == 3 {
+      // modified channel boolean expression for rev4 ground pinout
+      if channel == 0 || channel == 2 || channel == 4 {
         // inverse voltage divider
         ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
       } else {
@@ -491,7 +508,8 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
 
     Err(_e) => {
       eprintln!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
-      if channel == 0 || channel == 1 || channel == 3 {
+      // modified channel boolean expression for rev4 ground pinout
+      if channel == 0 || channel == 2 || channel == 4 {
         (-1.0, adc::Measurement::VPower)
       } else {
         (-1.0, adc::Measurement::IPower)
