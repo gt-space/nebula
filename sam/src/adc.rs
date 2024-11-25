@@ -141,7 +141,7 @@ impl ADC {
         self.write_reg(0x05, 0x0A);
       }
 
-      Measurement::Rtd => {
+      Measurement::Rtd1 | Measurement::Rtd2 | Measurement::Rtd3 => {
         self.write_reg(0x03, 0x09);
         self.write_reg(0x04, 0x1E);
         // self.write_reg(0x06, 0x47);
@@ -213,7 +213,9 @@ impl ADC {
   }
 
   pub fn get_adc_reading(&mut self, iteration: u64) -> (f64, f64) {
-    if self.measurement == Measurement::Rtd
+    if self.measurement == Measurement::Rtd1
+      || self.measurement == Measurement::Rtd2
+      || self.measurement == Measurement::Rtd3
       || self.measurement == Measurement::Tc1
       || self.measurement == Measurement::Tc2
     {
@@ -294,7 +296,7 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
-      Measurement::Rtd => match iteration % 2 {
+      Measurement::Rtd1 | Measurement::Rtd2 | Measurement::Rtd3 => match iteration % 2 {
         0 => {
           self.write_reg(0x02, 0x12);
           self.write_reg(0x05, 0x10);
@@ -354,7 +356,7 @@ impl ADC {
         reading = ((value as i32 + 32768) as f64) * (2.5 / ((1 << 15) as f64)); // 2.5 ref
                                                                                 // println!("{:?}: {:?}", (iteration % 2) + 1, reading);
       }
-      Measurement::Rtd => {
+      Measurement::Rtd1 | Measurement::Rtd2 | Measurement::Rtd3 => {
         reading = (value as f64) * (2.5 / ((1 << 15) as f64)) / 4.0; // 2.5 ref
                                                                      // println!("{:?}: {:?}", (iteration % 2) + 1, reading);
       }
@@ -422,7 +424,7 @@ pub fn gpio_controller_mappings( // --> whats on the board
 
     // modified pinout for rev4 ground and added cs diff_pin cuz i fucked up
     let diff_pin = controllers[0].get_pin(30);
-    ds_pin.mode(Output);
+    diff_pin.mode(Output);
 
     let rtd1_pin = controllers[1].get_pin(13);
     rtd1_pin.mode(Output);

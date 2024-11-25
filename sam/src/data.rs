@@ -30,6 +30,7 @@ pub fn generate_data_point(
   }
 }
 
+// modified for rev4 ground
 fn iteration_to_node_id(
   measurement: adc::Measurement,
   iteration: u64,
@@ -39,15 +40,19 @@ fn iteration_to_node_id(
     | adc::Measurement::IValve
     | adc::Measurement::VValve => iteration % 6 + 1,
     adc::Measurement::VPower => iteration % 5 + 1,
-    adc::Measurement::IPower | adc::Measurement::Rtd => iteration % 2 + 1,
-    adc::Measurement::DiffSensors => iteration % 3 + 1,
+    adc::Measurement::IPower => iteration % 2 + 1,
+    adc::Measurement::DiffSensors => iteration % 2 + 1,
     adc::Measurement::Tc1 => iteration % 4,
     adc::Measurement::Tc2 => iteration % 4 + 3,
+    adc::Measurement::Rtd1 => iteration % 2 + 1,
+    adc::Measurement::Rtd2 => iteration % 2 + 3,
+    adc::Measurement::Rtd3 => iteration % 2 + 5,
   };
 
   u32::try_from(node_id).ok()
 }
 
+// modified for rev4 ground
 fn measurement_to_channel_type(
   node_id: u32,
   measurement: adc::Measurement,
@@ -85,7 +90,9 @@ fn measurement_to_channel_type(
     (_, adc::Measurement::DiffSensors) => {
       Some(common::comm::ChannelType::DifferentialSignal)
     }
-    (_, adc::Measurement::Rtd) => Some(common::comm::ChannelType::Rtd),
+    (_, adc::Measurement::Rtd1) => Some(common::comm::ChannelType::Rtd),
+    (_, adc::Measurement::Rtd2) => Some(common::comm::ChannelType::Rtd),
+    (_, adc::Measurement::Rtd3) => Some(common::comm::ChannelType::Rtd),
     (_, adc::Measurement::Tc1) => Some(common::comm::ChannelType::Tc),
     (_, adc::Measurement::Tc2) => Some(common::comm::ChannelType::Tc),
   }

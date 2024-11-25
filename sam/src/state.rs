@@ -171,7 +171,6 @@ impl State {
 
         data.adcs = Some(vec![
           ds,
-          cl,
           vvalve,
           ivalve,
           pwr
@@ -309,7 +308,7 @@ impl State {
             let (raw_value, unix_timestamp, measurement) = match adc_enum {
               ADCEnum::ADC(adc) => {
                 let diff_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::DiffSensors;
-                let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+                let rtd_reached_max_channel = i > 1 && (adc.measurement == adc::Measurement::Rtd1 || adc.measurement == adc::Measurement::Rtd2 || adc.measurement == adc::Measurement::Rtd3);
                 // skip to next ADC logic
                 if diff_reached_max_channel || rtd_reached_max_channel {
                   continue;
