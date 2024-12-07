@@ -414,7 +414,7 @@ fn abort(controllers: &[Arc<Gpio>]) {
     controllers[1].get_pin(14), // valve 3
     controllers[1].get_pin(15), // valve 4
     controllers[0].get_pin(15),  // valve 5
-    controllers[0].get_pin(17), // valve 6
+    controllers[1].get_pin(17), // valve 6
   ];
 
   for pin in pins.iter() {

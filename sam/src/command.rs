@@ -134,7 +134,7 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
           pin.digital_write(High);
         }
         6 => {
-          let pin = gpio_controllers[0].get_pin(17);
+          let pin = gpio_controllers[1].get_pin(17);
           pin.mode(Output);
           pin.digital_write(High);
         }
@@ -167,7 +167,7 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
           pin.digital_write(Low);
         }
         6 => {
-          let pin = gpio_controllers[0].get_pin(17);
+          let pin = gpio_controllers[1].get_pin(17);
           pin.mode(Output);
           pin.digital_write(Low);
         }
