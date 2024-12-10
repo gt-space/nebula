@@ -320,8 +320,8 @@ impl State {
                 // get data and time
                 let (val, time) = match adc.measurement {
                   adc::Measurement::IValve => {
-                    let (v, t) = adc.get_adc_reading(i/2);
-                    let current_sel_pin = &valve_sel_pins[(i as usize) / 2];
+                    let (v, t) = adc.get_adc_reading((5 - i) / 2);
+                    let current_sel_pin = &valve_sel_pins[(5 - (i as usize)) / 2];
                     current_sel_pin.mode(Output); // added this cuz idk why it was not here before
 
                     match current_sel_pin.digital_read() {
@@ -329,12 +329,25 @@ impl State {
                       High => current_sel_pin.digital_write(Low),
                     }
                     
+                    if ((5 - i) % 2 == 0) {
+                      adc.write_iteration(((5 - i) / 2) - 1);
+                    }
+
                     (v, t)
                   },
-                  _ => adc.get_adc_reading(i)
-                };
 
-                adc.write_iteration(i + 1); // perform pin mux to next channel or reading
+                  adc::Measurement::VValve => {
+                    let (v, t) = adc.get_adc_reading(5-i);
+                    adc.write_iteration(5 - i - 1);
+                    (v, t)
+                  }
+                  _ => {
+                    let (v,t) = adc.get_adc_reading(i);
+                    adc.write_iteration(i + 1);
+                    (v, t)
+                  }
+                };
+                
                 adc.pull_cs_high_active_low(); // deselect current ADC
                 (val, time, adc.measurement)
               },
