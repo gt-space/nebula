@@ -338,7 +338,7 @@ impl ADC {
 
       Measurement::IValve => {
         reading  = (value as f64) * (2.5 / ((1 << 15) as f64));
-        reading = (reading * 1200.0) / 1560.0;
+        reading = (reading * 1200.0) / 1000.0; // different between rev4 ground and rev4 flight. flight is 1560 for the resistor
       }
 
       Measurement::VPower | Measurement::VValve => {
