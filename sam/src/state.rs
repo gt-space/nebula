@@ -173,6 +173,9 @@ impl State {
           ds,
           vvalve,
           ivalve,
+          rtd1,
+          rtd2,
+          rtd3,
           pwr
         ]);
 
@@ -347,7 +350,7 @@ impl State {
                     (v, t)
                   }
                 };
-                
+
                 adc.pull_cs_high_active_low(); // deselect current ADC
                 (val, time, adc.measurement)
               },
