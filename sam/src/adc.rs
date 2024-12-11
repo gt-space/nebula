@@ -549,15 +549,15 @@ pub fn init_valve_sel_pins(controllers: &[Arc<Gpio>]) -> [Pin; 3] {
   // modified pinout for rev4 ground
   let sel1 = controllers[0].get_pin(22);
   sel1.mode(Output);
-  sel1.digital_write(Low);
+  sel1.digital_write(High);
 
   let sel2 = controllers[0].get_pin(23);
   sel2.mode(Output);
-  sel2.digital_write(Low);
+  sel2.digital_write(High);
 
   let sel3 = controllers[3].get_pin(19);
   sel3.mode(Output);
-  sel3.digital_write(Low);
+  sel3.digital_write(High);
 
   [sel1, sel2, sel3]
 }

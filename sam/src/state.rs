@@ -343,7 +343,8 @@ impl State {
                     let (v, t) = adc.get_adc_reading(5-i);
                     adc.write_iteration(5 - i - 1);
                     (v, t)
-                  }
+                  },
+                  
                   _ => {
                     let (v,t) = adc.get_adc_reading(i);
                     adc.write_iteration(i + 1);
