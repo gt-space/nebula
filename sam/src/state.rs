@@ -332,8 +332,12 @@ impl State {
                       High => current_sel_pin.digital_write(Low),
                     }
                     
-                    if ((5 - i) % 2 == 0) {
-                      adc.write_iteration(((5 - i) / 2) - 1);
+                    if (5 - i) % 2 == 0 {
+                      if 5 - i == 0 {
+                        adc.write_iteration(2);
+                      } else {
+                        adc.write_iteration(((5 - i) / 2) - 1);
+                      }
                     }
 
                     (v, t)
@@ -341,7 +345,12 @@ impl State {
 
                   adc::Measurement::VValve => {
                     let (v, t) = adc.get_adc_reading(5-i);
-                    adc.write_iteration(5 - i - 1);
+                    if 5 - i == 0 {
+                      adc.write_iteration(5);
+                    } else {
+                      adc.write_iteration(5 - i - 1);
+                    }
+
                     (v, t)
                   },
                   
