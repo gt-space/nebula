@@ -276,21 +276,43 @@ impl ADC {
         _ => fail!("Failed register write — could not mod iteration"),
       },
 
+      // Measurement::IValve => match iteration % 6 {
+      //   0 | 1 => {
+      //     self.write_reg(0x02, 0x0C);
+      //   },
+
+      //   2 | 3 => {
+      //     self.write_reg(0x02, 0x10 | 0x0C);
+      //   },
+
+      //   4 | 5 => {
+      //     self.write_reg(0x02, 0x20 | 0x0C);
+      //   },
+
+      //   _ => fail!("Failed register write — could not mod iteration"),
+      // },
+
       Measurement::IValve => match iteration % 6 {
-        0 | 1 => {
+        0 => {
           self.write_reg(0x02, 0x0C);
-        },
-
-        2 | 3 => {
+        }
+        1 => {
           self.write_reg(0x02, 0x10 | 0x0C);
-        },
-
-        4 | 5 => {
+        }
+        2 => {
           self.write_reg(0x02, 0x20 | 0x0C);
-        },
-
+        }
+        3 => {
+          self.write_reg(0x02, 0x30 | 0x0C);
+        }
+        4 => {
+          self.write_reg(0x02, 0x40 | 0x0C);
+        }
+        5 => {
+          self.write_reg(0x02, 0x50 | 0x0C);
+        }
         _ => fail!("Failed register write — could not mod iteration"),
-      },
+      }
 
       Measurement::Rtd1 | Measurement::Rtd2 | Measurement::Rtd3 => match iteration % 2 {
         0 => {

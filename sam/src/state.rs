@@ -277,7 +277,13 @@ impl State {
               adc.reset_status(); // reset registers
               adc.init_regs(); // measurement specific register initialization
               adc.start_conversion(); // begin converting in single shot mode
-              adc.write_iteration(0); // pin mux to be on first channel
+              if (adc.measurement == adc::Measurement::IValve) {
+                adc.write_iteration(2);
+              } else if (adc.measurement == adc::Measurement::VValve) {
+                adc.write_iteration(5);
+              } else {
+                adc.write_iteration(0);
+              }
               adc.pull_cs_high_active_low(); // deselect current ADC
             },
 
