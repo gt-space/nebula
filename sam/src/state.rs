@@ -314,7 +314,7 @@ impl State {
          */
         for i in 0..6 {
           for adc_enum in data.adcs.as_mut().unwrap() {
-            let (raw_value, unix_timestamp, measurement) = match adc_enum {
+            let (raw_value, unix_timestamp, measurement, numba) = match adc_enum {
               ADCEnum::ADC(adc) => {
                 let diff_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::DiffSensors;
                 let rtd_reached_max_channel = i > 1 && (adc.measurement == adc::Measurement::Rtd1 || adc.measurement == adc::Measurement::Rtd2 || adc.measurement == adc::Measurement::Rtd3);
@@ -327,7 +327,7 @@ impl State {
                 data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
                 
                 // get data and time
-                let (val, time) = match adc.measurement {
+                let (val, time, numba_inner) = match adc.measurement {
                   adc::Measurement::IValve => {
                     let (v, t) = adc.get_adc_reading((5 - i) / 2);
                     let current_sel_pin = &valve_sel_pins[(5 - (i as usize)) / 2];
@@ -346,7 +346,7 @@ impl State {
                       }
                     }
 
-                    (v, t)
+                    (v, t, 5-i)
                   },
 
                   adc::Measurement::VValve => {
@@ -357,18 +357,18 @@ impl State {
                       adc.write_iteration(5 - i - 1);
                     }
 
-                    (v, t)
+                    (v, t, 5-i)
                   },
                   
                   _ => {
                     let (v,t) = adc.get_adc_reading(i);
                     adc.write_iteration(i + 1);
-                    (v, t)
+                    (v, t, i)
                   }
                 };
 
                 adc.pull_cs_high_active_low(); // deselect current ADC
-                (val, time, adc.measurement)
+                (val, time, adc.measurement, numba_inner)
               },
 
               ADCEnum::OnboardADC => {
@@ -378,12 +378,12 @@ impl State {
 
                 let (val, rail_measurement) = read_onboard_adc(i);
                 data.curr_measurement = Some(rail_measurement);
-                (val, 0.0, rail_measurement)
+                (val, 0.0, rail_measurement, i)
               }
             };
 
             
-            let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
+            let data_point = generate_data_point(raw_value, unix_timestamp, numba, measurement);
             data.data_points.push(data_point);
           }
         }
