@@ -1,0 +1,10 @@
+[package]
+name = "zed-f9p-04b"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spidev = "0.5"
+ublox = "0.4"
+chrono = "0.4"
+rppal = "0.22"
