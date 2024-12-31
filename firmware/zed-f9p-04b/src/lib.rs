@@ -31,13 +31,14 @@ pub struct PVT {
 
 pub struct GPS {
   spidev: Spidev,
-  d_sel: OutputPin, // SPI is disabled by default, d_sel needs to be set to 0 to enable SPI
+  // d_sel pin commented as it is already hardwired to GND on blackbox
+  //d_sel: OutputPin, // SPI is disabled by default, d_sel needs to be set to 0 to enable SPI
   cs_pin: OutputPin,
   parser: Parser
 }
 
 impl GPS {
-  pub fn new(bus: &str, d_sel_pin: u8, cs_pin: u8) -> std::io::Result<Self> {
+  pub fn new(bus: &str, /*d_sel_pin: u8,*/ cs_pin: u8) -> std::io::Result<Self> {
     // Initialize the SPI device
     let mut spidev = Spidev::open(bus)?;
     // See Datasheet Section 5.2
@@ -52,14 +53,14 @@ impl GPS {
 
     // Configure GPIO pins
     let gpio = Gpio::new()?;
-    let mut d_sel = gpio.get(d_sel_pin)?.into_output();
+    // let mut d_sel = gpio.get(d_sel_pin)?.into_output();
     let mut cs_pin = gpio.get(cs_pin)?.into_output();
 
     // Set initial pin states
-    d_sel.set_low(); // Enable SPI by setting d_sel to Low
+    // d_sel.set_low(); // Enable SPI by setting d_sel to Low
     cs_pin.set_high(); // Deassert CS (inactive)
 
-    Ok(GPS {spidev, d_sel, cs_pin, parser})
+    Ok(GPS {spidev, /*d_sel,*/ cs_pin, parser})
   }
 
   // Configures the GPS module to use only the GPS constellation
