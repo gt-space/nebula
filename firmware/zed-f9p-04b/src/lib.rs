@@ -1,7 +1,7 @@
-// Documentation
-// Datasheet: https://content.u-blox.com/sites/default/files/ZED-F9P-04B_DataSheet_UBX-21044850.pdf
-// Interface Description: https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf
-// Ublox examples: https://github.com/ublox-rs/ublox/blob/master/examples/ublox-cli/src/main.rs
+//! Documentation
+//! Datasheet: https://content.u-blox.com/sites/default/files/ZED-F9P-04B_DataSheet_UBX-21044850.pdf
+//! Interface Description: https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf
+//! Ublox examples: https://github.com/ublox-rs/ublox/blob/master/examples/ublox-cli/src/main.rs
 
 // TODO: May have to UBX-CFG-PRT for SPI first
 
@@ -20,12 +20,14 @@ use chrono::{DateTime, Utc};
 use rppal::gpio::{Gpio, OutputPin}; // Using Raspberry Pi (remember to enable SPI in raspi-config)
 
 
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PVT {
   position: Option<Position>,
   velocity: Option<Velocity>,
   time: Option<DateTime<Utc>>
 }
 
+#[derive(Debug)]
 pub struct GPS {
   spidev: Spidev,
   // d_sel pin commented as it is already hardwired to GND on blackbox
