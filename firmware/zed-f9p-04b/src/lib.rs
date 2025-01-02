@@ -5,26 +5,20 @@
 
 // TODO: May have to UBX-CFG-PRT for SPI first
 
-use spidev::{Spidev, SpidevOptions, SpiModeFlags}; // rppal also provides Raspberry Pi SPI interface if needed
-use std::{thread, time::Duration};
-use ublox::{
-  Position, 
-  Velocity, 
-  Parser, 
-  PacketRef, 
-  CfgValSetBuilder, 
-  cfg_val::CfgVal, 
-  CfgPrtSpiBuilder,
-  CfgMsgAllPortsBuilder};
 use chrono::{DateTime, Utc};
 use rppal::gpio::{Gpio, OutputPin}; // Using Raspberry Pi (remember to enable SPI in raspi-config)
-
+use spidev::{SpiModeFlags, Spidev, SpidevOptions}; // rppal also provides Raspberry Pi SPI interface if needed
+use std::{thread, time::Duration};
+use ublox::{
+  cfg_val::CfgVal, CfgMsgAllPortsBuilder, CfgPrtSpiBuilder, CfgValSetBuilder,
+  PacketRef, Parser, Position, Velocity,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PVT {
   position: Option<Position>,
   velocity: Option<Velocity>,
-  time: Option<DateTime<Utc>>
+  time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
@@ -33,11 +27,14 @@ pub struct GPS {
   // d_sel pin commented as it is already hardwired to GND on blackbox
   //d_sel: OutputPin, // SPI is disabled by default, d_sel needs to be set to 0 to enable SPI
   cs_pin: OutputPin,
-  parser: Parser
+  parser: Parser,
 }
 
 impl GPS {
-  pub fn new(bus: &str, /*d_sel_pin: u8,*/ cs_pin: u8) -> std::io::Result<Self> {
+  pub fn new(
+    bus: &str,
+    /*d_sel_pin: u8,*/ cs_pin: u8,
+  ) -> std::io::Result<Self> {
     // Initialize the SPI device
     let mut spidev = Spidev::open(bus)?;
     // See Datasheet Section 5.2
@@ -59,7 +56,11 @@ impl GPS {
     // d_sel.set_low(); // Enable SPI by setting d_sel to Low
     cs_pin.set_high(); // Deassert CS (inactive)
 
-    Ok(GPS {spidev, /*d_sel,*/ cs_pin, parser})
+    Ok(GPS {
+      spidev,
+      /*d_sel,*/ cs_pin,
+      parser,
+    })
   }
 
   // Configures the GPS module to use only the GPS constellation
@@ -86,7 +87,7 @@ impl GPS {
   //     cfg_data: &[
   //       CfgVal::SignalGpsEna(true),
   //       CfgVal::SignalGpsL1caEna(true),
-  //       CfgVal::SignalGpsL2cEna(true), 
+  //       CfgVal::SignalGpsL2cEna(true),
   //       CfgVal::SignalGalEna(false),
   //       CfgVal::SignalGalE1Ena(false),
   //       CfgVal::SignalGalE5bEna(false),
@@ -96,7 +97,7 @@ impl GPS {
   //       CfgVal::SignalQzssEna(false),
   //       CfgVal::SignalQzssL1caEna(false),
   //       CfgVal::SignalQzssL2cEna(false),
-  //       CfgVal::SignalGloEna(false),   
+  //       CfgVal::SignalGloEna(false),
   //       CfgVal::SignalGloL1Ena(false),
   //       CfgVal::SignalGLoL2Ena(false),
   //     ]
@@ -109,10 +110,12 @@ impl GPS {
   // Send MonVer message (asking for version information)
   // Useful to test SPI communication with the module since it is
   // configuration-independent
-  // See Interface Description Section 3.14.15 
+  // See Interface Description Section 3.14.15
   pub fn mon_ver(&mut self) -> std::io::Result<()> {
     self.select_chip()?;
-    self.spidev.write(&UbxPacketRequest::request_for::<MonVer>().into_packet_bytes())?;
+    self
+      .spidev
+      .write(&UbxPacketRequest::request_for::<MonVer>().into_packet_bytes())?;
     self.deselect_chip()?;
     let mut found_mon_ver = false;
     thread::sleep(Duration::from_millis(500));
@@ -126,8 +129,8 @@ impl GPS {
           packet.extension().collect::<Vec<&str>>()
         );
         println!("{:?}", packet);
-      },
-      _=> {
+      }
+      _ => {
         println!("{:?}", packet); // some other packet
       }
     });
@@ -146,7 +149,10 @@ impl GPS {
   // See Interface Description Section 3.10.10
   pub fn nav_pvt_poll_req(&mut self) -> std::io::Result<()> {
     self.select_chip()?;
-    self.spidev.write(&CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>([0, 0, 0, 0, 1, 0]).into_packet_bytes())?;
+    self.spidev.write(
+      &CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>([0, 0, 0, 0, 1, 0])
+        .into_packet_bytes(),
+    )?;
     self.deselect_chip()?;
     Ok(())
   }
@@ -206,10 +212,13 @@ impl GPS {
     } else {
       None
     }
-}
+  }
 
-  // reads packets from the SPI bus 
-  fn read_packets<T: FnMut(PacketRef)>(&mut self, mut cb: T) -> std::io::Result<()> {
+  // reads packets from the SPI bus
+  fn read_packets<T: FnMut(PacketRef)>(
+    &mut self,
+    mut cb: T,
+  ) -> std::io::Result<()> {
     loop {
       const MAX_PAYLOAD_LEN: usize = 1240;
       let mut local_buf = [0; MAX_PAYLOAD_LEN];
@@ -227,14 +236,14 @@ impl GPS {
         match it.next() {
           Some(Ok(packet)) => {
             cb(packet);
-          },
+          }
           Some(Err(_)) => {
             // Received a malformed packet, ignore it
-          },
+          }
           None => {
             // We've eaten all the packets we have
             break;
-          },
+          }
         }
       }
     }
@@ -259,13 +268,13 @@ impl GPS {
   // Useful if we need to manually construct packets
   // See Interface Description Section 3.4
   fn calculate_checksum(&self, payload: &[u8]) -> (u8, u8) {
-      let mut ck_a = 0u8;
-      let mut ck_b = 0u8;
-      for byte in payload {
-          ck_a = ck_a.wrapping_add(*byte);
-          ck_b = ck_b.wrapping_add(ck_a);
-      }
-      (ck_a, ck_b)
+    let mut ck_a = 0u8;
+    let mut ck_b = 0u8;
+    for byte in payload {
+      ck_a = ck_a.wrapping_add(*byte);
+      ck_b = ck_b.wrapping_add(ck_a);
+    }
+    (ck_a, ck_b)
   }
 
   // Asserts the chip select line (active low).
@@ -280,4 +289,3 @@ impl GPS {
     Ok(())
   }
 }
-
