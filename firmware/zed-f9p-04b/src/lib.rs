@@ -3,13 +3,10 @@
 // Interface Description: https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf
 // Ublox examples: https://github.com/ublox-rs/ublox/blob/master/examples/ublox-cli/src/main.rs
 
-// TODO: monver for additional testing
-// May have to UBX-CFG-PRT for SPI first
-// NavPvt Poll request message (I/O port 4 is SPI)
+// TODO: May have to UBX-CFG-PRT for SPI first
 
 use spidev::{Spidev, SpidevOptions, SpiModeFlags}; // rppal also provides Raspberry Pi SPI interface if needed
-use std::io::{Read, Write};
-use std::time::Duration;
+use std::{thread, time::Duration};
 use ublox::{
   Position, 
   Velocity, 
@@ -106,6 +103,51 @@ impl GPS {
   //   // If using ublox doesn't work, we can also manually create the byte array.
   //   packet
   // }
+
+  // Send MonVer message (asking for version information)
+  // Useful to test SPI communication with the module since it is
+  // configuration-independent
+  // See Interface Description Section 3.14.15 
+  pub fn mon_ver(&mut self) -> std::io::Result<()> {
+    self.select_chip()?;
+    self.spidev.write(&UbxPacketRequest::request_for::<MonVer>().into_packet_bytes())?;
+    self.deselect_chip()?;
+    let mut found_mon_ver = false;
+    thread::sleep(Duration::from_millis(500));
+    self.read_packets(|packet| match packet {
+      PacketRef::MonVer(packet) => {
+        found_mon_ver = true;
+        println!(
+          "SW version: {} HW version: {}; Extensions: {:?}",
+          packet.software_version(),
+          packet.hardware_version(),
+          packet.extension().collect::<Vec<&str>>()
+        );
+        println!("{:?}", packet);
+      },
+      _=> {
+        println!("{:?}", packet); // some other packet
+      }
+    });
+    if found_mon_ver {
+      Ok(())
+    } else {
+      Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "No UBX-MON-VER response received from the device.",
+      ))
+    }
+  }
+
+  // NavPvt Poll request message (I/O port id 4 is SPI)
+  // Call this first to start receiving NavPvt messages
+  // See Interface Description Section 3.10.10
+  pub fn nav_pvt_poll_req(&mut self) -> std::io::Result<()> {
+    self.select_chip()?;
+    self.spidev.write(&CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>([0, 0, 0, 0, 1, 0]).into_packet_bytes())?;
+    self.deselect_chip()?;
+    Ok(())
+  }
 
   // Polls the GPS module for a PVT (Position, Velocity, Time) message
   // See Interface Description Section 3.15.13
