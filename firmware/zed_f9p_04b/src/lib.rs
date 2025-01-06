@@ -48,7 +48,7 @@ impl fmt::Display for GPSError {
     match self {
       GPSError::SPI(err) => write!(f, "SPI error: {}", err),
       GPSError::GPIO(err) => write!(f, "GPIO error: {}", err),
-      GPSError::GPSMessage(err) => write!(f, "GPS Message error {}", err),
+      GPSError::GPSMessage(err) => write!(f, "GPS Message error: {}", err),
       GPSError::Configuration(msg) => write!(f, "Configuration error: {}", msg),
     }
   }
@@ -155,26 +155,32 @@ impl GPS {
     self.spidev.write_all(
       &UbxPacketRequest::request_for::<MonVer>().into_packet_bytes(),
     )?;
-    self.deselect_chip()?;
     let mut found_mon_ver = false;
-    thread::sleep(Duration::from_millis(500));
-    self
-      .read_packets(|packet| match packet {
-        PacketRef::MonVer(packet) => {
-          found_mon_ver = true;
-          println!(
-            "SW version: {} HW version: {}; Extensions: {:?}",
-            packet.software_version(),
-            packet.hardware_version(),
-            packet.extension().collect::<Vec<&str>>()
-          );
-          println!("{:?}", packet);
-        }
-        _ => {
-          println!("{:?}", packet); // some other packet
-        }
-      })
-      .map_err(GPSError::GPSMessage)?;
+
+    // Need to fix this, but only works if you wait for a bit before reading response
+    thread::sleep(Duration::from_millis(1000));
+    let mut found_packet = false;
+    while !found_packet { 
+      found_packet = self
+        .read_packets(|packet| match packet {
+          PacketRef::MonVer(packet) => {
+            found_mon_ver = true;
+            println!(
+              "SW version: {} HW version: {}; Extensions: {:?}",
+              packet.software_version(),
+              packet.hardware_version(),
+              packet.extension().collect::<Vec<&str>>()
+            );   
+          }
+          _ => {
+            println!("Some other packet: {:?}", packet); // some other packet
+          }
+        })
+        .map_err(GPSError::GPSMessage)?;
+      // println!("found packet: {}", found_packet);
+    }
+    println!("Read MON-VER!");
+    self.deselect_chip()?;
     if found_mon_ver {
       Ok(())
     } else {
@@ -186,18 +192,20 @@ impl GPS {
   }
 
   // NavPvt Poll request message (I/O port id 4 is SPI)
-  // Call this first to start receiving NavPvt messages
+  // Call this first to set rate of periodic NavPvt messages
   // See Interface Description Section 3.10.10
-  pub fn nav_pvt_poll_req(&mut self) -> Result<(), GPSError> {
-    self.select_chip()?;
-    self.spidev.write_all(
-      &CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>([0, 0, 0, 0, 1, 0])
-        .into_packet_bytes(),
-    )?;
-    self.deselect_chip()?;
-    self.wait_for_ack::<CfgMsgAllPorts>()?;
-    Ok(())
-  }
+  // pub fn nav_pvt_poll_req(&mut self) -> Result<(), GPSError> {
+  //   self.select_chip()?;
+  //   self.spidev.write_all(
+  //     &CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>([0, 0, 0, 0, 1, 0])
+  //       .into_packet_bytes(),
+  //   )?;
+  //   println!("Sent pvt poll req message!");
+  //   //self.wait_for_ack::<CfgMsgAllPorts>()?;
+  //   //println!("Got ack!");
+  //   self.deselect_chip()?;
+  //   Ok(())
+  // }
 
   // Polls the GPS module for a PVT (Position, Velocity, Time) message
   // See Interface Description Section 3.15.13
@@ -207,50 +215,49 @@ impl GPS {
       velocity: None,
       time: None,
     };
+    self.select_chip()?;
+    self.spidev.write_all(
+      &UbxPacketRequest::request_for::<NavPvt>().into_packet_bytes(),
+    )?;
+    thread::sleep(Duration::from_millis(1000));
+    let mut got_packet = false;
+    while !got_packet {
+      got_packet = self
+        .read_packets(|packet| match packet {
+          PacketRef::NavPvt(sol) => {
+            // println!("Got a pvt Packet!");
+            let has_time = sol.fix_type() == GpsFix::Fix3D
+              || sol.fix_type() == GpsFix::GPSPlusDeadReckoning
+              || sol.fix_type() == GpsFix::TimeOnlyFix;
+            let has_posvel = sol.fix_type() == GpsFix::Fix3D
+              || sol.fix_type() == GpsFix::GPSPlusDeadReckoning;
 
-    self
-      .read_packets(|packet| match packet {
-        PacketRef::NavPvt(sol) => {
-          let has_time = sol.fix_type() == GpsFix::Fix3D
-            || sol.fix_type() == GpsFix::GPSPlusDeadReckoning
-            || sol.fix_type() == GpsFix::TimeOnlyFix;
-          let has_posvel = sol.fix_type() == GpsFix::Fix3D
-            || sol.fix_type() == GpsFix::GPSPlusDeadReckoning;
+            if has_posvel {
+              let pos: Position = (&sol).into();
+              let vel: Velocity = (&sol).into();
 
-          if has_posvel {
-            let pos: Position = (&sol).into();
-            let vel: Velocity = (&sol).into();
+              println!("Sol: {:?}", sol);
 
-            println!(
-              "Latitude: {:.5} Longitude: {:.5} Altitude: {:.2}m",
-              pos.lat, pos.lon, pos.alt
-            );
-            println!(
-              "Speed: {:.2} m/s Heading: {:.2} degrees",
-              vel.speed, vel.heading
-            );
-            println!("Sol: {:?}", sol);
+              pvt.position = Some(pos);
+              pvt.velocity = Some(vel);
+            }
 
-            pvt.position = Some(pos);
-            pvt.velocity = Some(vel);
-          }
-
-          if has_time {
-            if let Ok(time) = (&sol).try_into() {
-              let time: DateTime<Utc> = time;
-              println!("Time: {:?}", time);
-              pvt.time = Some(time);
-            } else {
-              println!("Could not parse NAV-PVT time field to UTC");
+            if has_time {
+              if let Ok(time) = (&sol).try_into() {
+                let time: DateTime<Utc> = time;
+                pvt.time = Some(time);
+              } else {
+                println!("Could not parse NAV-PVT time field to UTC");
+              }
             }
           }
-        }
-        _ => {
-          println!("{:?}", packet); // some other packet
-        }
-      })
-      .map_err(GPSError::GPSMessage)?;
-
+          _ => {
+            println!("{:?}", packet); // some other packet
+          }
+        })
+        .map_err(GPSError::GPSMessage)?;
+    }
+    self.deselect_chip()?;  
     if pvt.position.is_some() || pvt.velocity.is_some() || pvt.time.is_some() {
       Ok(Some(pvt))
     } else {
@@ -261,55 +268,59 @@ impl GPS {
     }
   }
 
+  pub fn read_all(&mut self) -> Result<(), GPSError> {
+    self.select_chip()?;
+    self.read_packets(|packet| {println!("{:?}", packet)}).map_err(GPSError::GPSMessage)?;
+    Ok(())
+  }
+
   // reads packets from the SPI bus
   fn read_packets<T: FnMut(PacketRef)>(
     &mut self,
     mut cb: T,
-  ) -> std::io::Result<()> {
+  ) -> std::io::Result<bool> {
+    const MAX_PAYLOAD_LEN: usize = 1240;
+    let mut local_buf = [0; MAX_PAYLOAD_LEN];
+    let nbytes = self.spidev.read(&mut local_buf)?;
+    let mut got_good_packet = false;
+    // parser.consume adds the buffer to its internal buffer, and
+    // returns an iterator-like object we can use to process the packets
+    let mut it = self.parser.consume(&local_buf[..nbytes]);
     loop {
-      const MAX_PAYLOAD_LEN: usize = 1240;
-      let mut local_buf = [0; MAX_PAYLOAD_LEN];
-      self.select_chip()?;
-      let nbytes = self.spidev.read(&mut local_buf)?;
-      self.deselect_chip()?;
-      if nbytes == 0 {
-        break;
-      }
-
-      // parser.consume adds the buffer to its internal buffer, and
-      // returns an iterator-like object we can use to process the packets
-      let mut it = self.parser.consume(&local_buf[..nbytes]);
-      loop {
-        match it.next() {
-          Some(Ok(packet)) => {
-            cb(packet);
-          }
-          Some(Err(_)) => {
-            // Received a malformed packet, ignore it
-          }
-          None => {
-            // We've eaten all the packets we have
-            break;
-          }
+      match it.next() {
+        Some(Ok(packet)) => {
+          got_good_packet = true;
+          println!("Got a good packet!");
+          cb(packet);
+        }
+        Some(Err(_)) => {
+          println!("Got a malformed packet");
+          // Received a malformed packet, ignore it
+        }
+        None => {
+          println!("Eaten all packets");
+          // We've eaten all the packets we have
+          break;
         }
       }
     }
-    Ok(())
+    Ok(got_good_packet)
   }
 
-  fn wait_for_ack<T: UbxPacketMeta>(&mut self) -> std::io::Result<()> {
-    let mut found_packet = false;
-    while !found_packet {
-      self.read_packets(|packet| {
-        if let PacketRef::AckAck(ack) = packet {
-          if ack.class() == T::CLASS && ack.msg_id() == T::ID {
-            found_packet = true;
-          }
-        }
-      })?;
-    }
-    Ok(())
-  }
+  // fn wait_for_ack<T: UbxPacketMeta>(&mut self) -> std::io::Result<()> {
+  //   let mut found_packet = false;
+  //   while !found_packet {
+  //     self.read_packets(|packet| {
+  //       println!("Ack packet: {:?}", packet);
+  //       if let PacketRef::AckAck(ack) = packet {
+  //         if ack.class() == T::CLASS && ack.msg_id() == T::ID {
+  //           found_packet = true;
+  //         }
+  //       }
+  //     })?;
+  //   }
+  //   Ok(())
+  // }
 
   // Calculates the UBX checksum for a given payload
   // Useful if we need to manually construct packets

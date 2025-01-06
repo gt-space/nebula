@@ -4,7 +4,7 @@ use std::time::Duration;
 
 fn main() {
   let bus = "/dev/spidev0.0"; // Adjust this
-  let cs_pin = 0; // Adjust this
+  let cs_pin = 5; // Adjust this
 
   println!("Initializing GPS...");
   match GPS::new(bus, cs_pin) {
@@ -14,12 +14,6 @@ fn main() {
       println!("Getting device version information...");
       if let Err(e) = gps.mon_ver() {
         eprintln!("Failed to get MON-VER message: {}", e);
-        return;
-      }
-
-      println!("Sending NAV-PVT poll request...");
-      if let Err(e) = gps.nav_pvt_poll_req() {
-        eprintln!("Failed to send NAV-PVT poll request: {}", e);
         return;
       }
 
