@@ -1,9 +1,10 @@
 import { For, createSignal } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, stopSequence, sendAbort } from "../comm";
+import { Config, Sequence, State, getSequences, runSequence, serverIp, StreamState, stopSequence, sendAbort } from "../comm";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
+import { format } from "date-fns";
 import Footer from "../general-components/Footer";
 
 const [configurations, setConfigurations] = createSignal();
@@ -26,9 +27,29 @@ listen('device_update', (event) => {
 })
 
 function dispatchSequence() {
-  const seqDropdown = document.getElementById("sequenceselect")! as HTMLSelectElement;
-  console.log(seqDropdown);
-  runSequence(serverIp() as string, seqDropdown.value, override());
+  try {
+    const seqDropdown = document.getElementById("sequenceselect")! as HTMLSelectElement;
+    console.log(seqDropdown);
+    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
+    const fileName = `${seqDropdown.value}_${timestamp}.py`;
+    const currentSequence = (sequences() as Array<Sequence>).find(seq => seq.name === seqDropdown.value);
+    if (!currentSequence) {
+      throw new Error('Sequence not found');
+    }
+    const blob = new Blob([currentSequence.script], { type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    console.log(`Sequence saved as ${fileName}`);
+    runSequence(serverIp() as string, seqDropdown.value, override());
+  } catch (error) {
+    console.error('Error dispatching sequence:', error);
+  }
 }
 
 function Sequnces() {
