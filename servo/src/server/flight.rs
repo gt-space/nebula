@@ -2,7 +2,7 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::future::Future;
+use std::{future::Future, io::ErrorKind};
 
 use common::comm::{
   Computer,
@@ -125,10 +125,16 @@ impl FlightComputer {
 
     // if the flight stream reads zero bytes, it's closed.
     // this indicates that the current flight computer should not be there.
-    self
-      .stream
-      .try_read(&mut buffer)
-      .is_ok_and(|size| size == 0)
+    let res = self.stream.try_read(&mut buffer);
+    match res {
+      // no error means we didn't lose connection, unless we hit "end of stream"
+      // and recieve a size of 0 (graceful shutdown of connection)
+      Ok(size) => size == 0,
+
+      Err(e) => {
+        e.kind() != ErrorKind::WouldBlock
+      }
+    }
   }
 
   /// Sends a comprehensive update of mappings, triggers, and abort sequence to
