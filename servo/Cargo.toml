@@ -25,7 +25,7 @@ serde_json = "1.0"
 sqlx = "0.7.3"
 ssh2 = "0.9"
 sysinfo = "0.29"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "signal"] }
 tower-http = { version = "0.5", features = ["cors"] }
 tui-input = "0.8.0"
 unicode-width = "0.1.11"

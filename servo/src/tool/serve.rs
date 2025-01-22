@@ -7,13 +7,10 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Function used to convert std::future::pending to a join handle in the serve
-/// functions selection of a shutdown task (In theory this can be converted to
-/// checking a value in shared every X unit of time if we wish to allow the GUI
-/// to shut down servo and thus the command simple set the value to quit / true
-/// / etc) (Potential future feature)
-async fn infinite_hang() -> io::Result<()> {
-  std::future::pending::<()>().await;
+/// Function used to convert ctrl_c signal to a join handle 
+/// used to await shutdown for the web server
+async fn wait_for_end() -> io::Result<()> {
+  let _ = tokio::signal::ctrl_c().await;
   Ok(())
 }
 
@@ -50,7 +47,7 @@ pub fn serve(servo_dir: &Path, args: &ArgMatches) -> anyhow::Result<()> {
           server.shared.clone(),
         ))) // Launch the TUI
       } else {
-        tokio::spawn(infinite_hang()) // infinite runtime
+        tokio::spawn(wait_for_end()) // infinite runtime
       };
 
       server.serve(shutdown_task).await
