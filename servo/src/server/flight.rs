@@ -3,6 +3,7 @@ use super::{Database, Shared};
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
 use std::{future::Future, io::ErrorKind};
+use std::{future::Future, io::ErrorKind};
 
 use common::comm::{
   Computer,
@@ -131,9 +132,7 @@ impl FlightComputer {
       // and recieve a size of 0 (graceful shutdown of connection)
       Ok(size) => size == 0,
 
-      Err(e) => {
-        e.kind() != ErrorKind::WouldBlock
-      }
+      Err(e) => e.kind() != ErrorKind::WouldBlock
     }
   }
 
