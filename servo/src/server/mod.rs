@@ -50,6 +50,9 @@ pub struct Shared {
   pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
 
   /// The controller for logging to files and the TUI
+  /// 
+  /// Note : avoid ever having another mutex inside of logging, as it may cause
+  /// deadlocking
   pub logs: Arc<(Mutex<LogsController>, Notify)>,
 }
 

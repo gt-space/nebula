@@ -130,6 +130,12 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             FlightControlMessage::StopSequence(name) => {
               println!("received request to stop sequence {}", name)
             }
+            FlightControlMessage::BmsCommand(name) => {
+              println!("received bms command {}", name)
+            }
+            FlightControlMessage::AhrsCommand(name) => {
+              println!("received Ahrs command {}", name)
+            }
             FlightControlMessage::Abort => println!("Received abort request"),
           },
         }

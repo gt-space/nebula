@@ -1,4 +1,5 @@
 pub use common::comm::{Log, LogCategory, LogType};
+use crate::server::Error;
 use std::path::PathBuf;
 
 /// Ring buffer structure.
@@ -272,6 +273,34 @@ impl LogsController {
       header,
       contents,
     })
+  }
+  
+  /// Log macro for adding a log from default source at current time
+  pub fn log_error(
+    &mut self,
+    log_category : LogCategory,
+    err : &Error,
+  ) {
+    let err_log : Log = match err {
+      Error::Sql(sql_err) => Log {
+          log_type: LogType::Error,
+          log_category,
+          time_stamp: std::time::SystemTime::now(),
+          source: self.source_name.clone(),
+          header: String::from("Sql Error : "),
+          contents: format!("{}", sql_err),
+        },
+      Error::Raw(str, status_code) =>
+        Log {
+          log_type: LogType::Error,
+          log_category,
+          time_stamp: std::time::SystemTime::now(),
+          source: self.source_name.clone(),
+          header: format!("Server Error {} : ", status_code),
+          contents: str.clone(),
+      }
+    };
+    self.log(err_log);
   }
 
   /// Iterate over the Logs from newest to oldest

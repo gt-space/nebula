@@ -1,5 +1,7 @@
+use std::fmt;
+
 use axum::{extract::State, Json};
-use common::comm::Sequence;
+use common::comm::{ Sequence, LogType, LogCategory };
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +90,12 @@ pub async fn save_sequence(
     )
     .map_err(internal)?;
 
+  // log saving said sequence
+  {
+    let mut logs_controller = shared.logs.0.lock().await;
+    logs_controller.log_here(LogType::Standard, LogCategory::Sequences, format!("Saving sequence {}", request.name), String::new());
+  }
+
   // if the incoming sequence is the abort sequence, immediately send it over to
   // flight to be saved, _not run_.
   if request.name == "abort" {
@@ -116,6 +124,11 @@ pub async fn delete_sequence(
   State(shared): State<Shared>,
   Json(request): Json<DeleteSequenceRequest>,
 ) -> server::Result<()> {
+  // log saving said sequence
+  {
+    let mut logs_controller = shared.logs.0.lock().await;
+    logs_controller.log_here(LogType::Standard, LogCategory::Sequences, format!("Deleting sequence {}", request.name), String::new());
+  }
   shared
     .database
     .connection
@@ -147,7 +160,13 @@ pub async fn run_sequence(
   // TODO: Add check for active configuration against the configuration_id in
   // the database.
 
-  let sequence = shared
+  // log saving said sequence
+  {
+    let mut logs_controller = shared.logs.0.lock().await;
+    logs_controller.log_here(LogType::Standard, LogCategory::Sequences, format!("Attempting to run sequence \"{}\"", request.name), String::new());
+  }
+
+  let result = shared
     .database
     .connection
     .lock()
@@ -161,8 +180,19 @@ pub async fn run_sequence(
           script: row.get(0)?,
         })
       },
-    )
-    .map_err(bad_request)?;
+    );
+  
+  // log error message if an error occurs
+  let sequence = match result {
+    Ok(seq) => seq,
+    Err(err) => {
+      let mut logs_controller = shared.logs.0.lock().await;
+      let bad_req = bad_request(err);
+      logs_controller.log_error(LogCategory::Sequences, &bad_req);
+      return Err(bad_req);
+    }
+  };
+  
 
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     // special case for abort sequence, because sending it over just saves it
@@ -175,8 +205,10 @@ pub async fn run_sequence(
 
     // otherwise, send the sequence as normal to the flight computer
     flight.send_sequence(sequence).await.map_err(internal)?;
-  } else {
-    return Err(internal("flight computer not connected"));
+  } else {let mut logs_controller = shared.logs.0.lock().await;
+    let err = internal("Flight computer not connected");
+    logs_controller.log_error(LogCategory::Sequences, &err);
+    return Err(err);
   }
 
   Ok(())
