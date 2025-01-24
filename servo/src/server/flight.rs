@@ -3,7 +3,6 @@ use super::{Database, Shared};
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
 use std::{future::Future, io::ErrorKind};
-use std::{future::Future, io::ErrorKind};
 
 use common::comm::{
   Computer,
